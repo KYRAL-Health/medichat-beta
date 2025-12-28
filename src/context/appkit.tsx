@@ -23,30 +23,33 @@ if (!projectId) {
   );
 }
 
-// Get base URL for metadata
-// NEXT_PUBLIC_APP_URL should be set in Vercel environment variables
-// Format: https://your-domain.vercel.app (or your custom domain)
+// Get base URL for metadata - evaluated at runtime in the browser
+// Priority: NEXT_PUBLIC_APP_URL env var > window.location.origin > localhost
 const getBaseUrl = () => {
-  // Use explicit env var if set (recommended for production)
+  // Explicit env var (set in Vercel) - available at build time
   if (process.env.NEXT_PUBLIC_APP_URL) {
     return process.env.NEXT_PUBLIC_APP_URL;
   }
-  // Client-side fallback: use current origin
+  // Runtime: use current origin (works in browser)
   if (typeof window !== "undefined") {
     return window.location.origin;
   }
-  // Build-time fallback (will be replaced at runtime)
+  // Build-time fallback (shouldn't be used in production)
   return "http://localhost:3000";
 };
 
-const baseUrl = getBaseUrl();
-
-const metadata = {
-  name: "MediChat Assistant",
-  description: "AI-powered medical assistant",
-  url: baseUrl,
-  icons: [`${baseUrl}/favicon.ico`],
+// Create metadata with dynamic URL
+const createMetadata = () => {
+  const baseUrl = getBaseUrl();
+  return {
+    name: "MediChat Assistant",
+    description: "AI-powered medical assistant",
+    url: baseUrl,
+    icons: [`${baseUrl}/favicon.ico`],
+  };
 };
+
+const metadata = createMetadata();
 
 const solanaAdapter = new SolanaAdapter({
   wallets: [new PhantomWalletAdapter(), new SolflareWalletAdapter()],
