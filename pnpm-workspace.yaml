@@ -1,0 +1,4 @@
+onlyBuiltDependencies:
+  - '@reown/appkit'
+  - '@stellar/stellar-sdk'
+  - bufferutil

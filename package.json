@@ -1,0 +1,54 @@
+{
+  "name": "vibe-code-starter",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.958.0",
+    "@reown/appkit": "^1.8.15",
+    "@reown/appkit-adapter-solana": "^1.8.15",
+    "@solana/wallet-adapter-wallets": "^0.19.37",
+    "@tailwindcss/typography": "^0.5.19",
+    "bs58": "^6.0.0",
+    "drizzle-orm": "^0.44.7",
+    "jsonwebtoken": "^9.0.3",
+    "next": "16.0.10",
+    "pdf-parse": "^1.1.4",
+    "pg": "^8.16.3",
+    "pino": "^10.1.0",
+    "thread-stream": "^4.0.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "tweetnacl": "^1.0.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.18",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^20.19.27",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/pg": "^8.16.0",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "drizzle-kit": "^0.31.8",
+    "eslint": "^9.39.2",
+    "eslint-config-next": "16.0.10",
+    "tailwindcss": "^4.1.18",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "pino": "^10.1.0",
+      "thread-stream": "^4.0.0"
+    }
+  }
+}
