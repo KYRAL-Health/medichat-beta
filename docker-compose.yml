@@ -1,0 +1,49 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Public Config
+        - NEXT_PUBLIC_APP_URL=http://localhost:3000
+        # - NEXT_PUBLIC_REOWN_PROJECT_ID=...
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/medichat
+      - NODE_ENV=production
+      # AI Configuration
+      # - AI_API_BASE=https://openrouter.ai/api/v1"
+      # - AI_API_KEY=api-key
+      # - AI_MODEL_CHAT=openai/gpt-4o
+      # - AI_MODEL_EXTRACT=openai/gpt-4o-mini
+      # - AI_MODEL_DASHBOARD=openai/gpt-4o-mini
+      
+      # Storage Configuration (S3)
+      # - REGION=us-east-1
+      # - SUPABASE_BUCKET_ENDPOINT=...
+      # - BUCKET_NAME=...
+      # - SUPABASE_BUCKET_ACCESS_KEY_ID=...
+      # - SUPABASE_BUCKET_SECRET=...
+      
+      # Auth
+      - JWT_SECRET=changeme_in_production
+      
+    depends_on:
+      - db
+
+  db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: medichat
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:
