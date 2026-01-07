@@ -436,7 +436,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const assistantFinal = convo
+    // Find the last assistant message with valid string content
+    const assistantMessage = convo
       .slice()
       .reverse()
       .find(
@@ -444,10 +445,16 @@ export async function POST(req: NextRequest) {
           m.role === "assistant" &&
           typeof m.content === "string" &&
           m.content.trim()
-      )?.content as string;
+      );
+
+    const assistantContent =
+      typeof assistantMessage?.content === "string"
+        ? assistantMessage.content
+        : null;
 
     const assistantText =
-      assistantFinal ?? "I’m not sure I understood—could you rephrase?";
+      assistantContent?.trim() ||
+      "I'm not sure I understood—could you rephrase?";
 
     const savedAssistant = await db
       .insert(chatMessages)
