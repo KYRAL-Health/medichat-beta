@@ -21,6 +21,7 @@
     "drizzle-orm": "^0.44.7",
     "jsonwebtoken": "^9.0.3",
     "next": "16.0.10",
+    "openai": "^6.15.0",
     "pdf-parse": "^1.1.4",
     "pg": "^8.16.3",
     "pino": "^10.1.0",

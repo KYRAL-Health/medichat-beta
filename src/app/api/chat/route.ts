@@ -5,9 +5,11 @@ import { z } from "zod";
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
 import {
-  openRouterChatCompletion,
-  type OpenRouterTool,
-} from "@/server/ai/openrouter";
+  chatCompletion,
+  getChatModel,
+  type AiTool,
+  type ChatMessage,
+} from "@/server/ai";
 import { proposeMemory, retrieveMemories } from "@/server/ai/tools";
 import { proposePatientRecordSuggestion } from "@/server/ai/patientTools";
 import { db } from "@/server/db";
@@ -27,10 +29,6 @@ const ChatSchema = z.object({
   message: z.string().min(1).max(8000),
   documentIds: z.array(z.string().uuid()).optional(),
 });
-
-function getChatModel() {
-  return process.env.OPENROUTER_MODEL_CHAT ?? "openai/gpt-4o";
-}
 
 function safeJsonParse<T>(value: string): T | null {
   try {
@@ -172,7 +170,7 @@ export async function POST(req: NextRequest) {
       docContext,
     ].join("\n");
 
-    const tools: OpenRouterTool[] = [
+    const tools: AiTool[] = [
       {
         type: "function",
         function: {
@@ -246,12 +244,7 @@ export async function POST(req: NextRequest) {
 
     const system = mode === "physician" ? physicianSystem : patientSystem;
 
-    let convo: Array<{
-      role: "system" | "user" | "assistant" | "tool";
-      content: string | null;
-      name?: string;
-      tool_call_id?: string;
-    }> = [{ role: "system", content: system }];
+    let convo: ChatMessage[] = [{ role: "system", content: system }];
 
     for (const m of chronological) {
       if (m.senderRole === "tool") {
@@ -277,7 +270,7 @@ export async function POST(req: NextRequest) {
 
     // Tool loop (max 3 iterations)
     for (let i = 0; i < 3; i++) {
-      const resp = await openRouterChatCompletion({
+      const resp = await chatCompletion({
         model: getChatModel(),
         messages: convo,
         tools,
@@ -315,7 +308,6 @@ export async function POST(req: NextRequest) {
           convo.push({
             role: "tool",
             tool_call_id: call.id,
-            name: call.function.name,
             content: JSON.stringify({ memories }),
           });
         } else if (call.function.name === "logMemory") {
@@ -327,7 +319,6 @@ export async function POST(req: NextRequest) {
             convo.push({
               role: "tool",
               tool_call_id: call.id,
-              name: call.function.name,
               content: JSON.stringify({ error: "MISSING_MEMORY_TEXT" }),
             });
             continue;
@@ -349,7 +340,6 @@ export async function POST(req: NextRequest) {
           convo.push({
             role: "tool",
             tool_call_id: call.id,
-            name: call.function.name,
             content: JSON.stringify({ ok: true, memoryId: mem.id }),
           });
         } else if (call.function.name === "getDocumentInsights") {
@@ -440,7 +430,6 @@ export async function POST(req: NextRequest) {
           convo.push({
             role: "tool",
             tool_call_id: call.id,
-            name: call.function.name,
             content: JSON.stringify({ error: "UNKNOWN_TOOL" }),
           });
         }

@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
-import { openRouterChatCompletion } from "@/server/ai/openrouter";
+import { chatCompletion, getDashboardModel } from "@/server/ai";
 import { db } from "@/server/db";
 import {
   patientDailyDashboards,
@@ -33,14 +33,6 @@ const DashboardSchema = z.object({
   redFlags: z.array(z.string()).default([]),
   suggestedFollowUps: z.array(z.string()).default([]),
 });
-
-function getDashboardModel() {
-  return (
-    process.env.OPENROUTER_MODEL_DASHBOARD ??
-    process.env.OPENROUTER_MODEL_CHAT ??
-    "openai/gpt-4o-mini"
-  );
-}
 
 function extractJson(text: string): unknown {
   const t = text.trim();
@@ -103,7 +95,7 @@ export async function POST(req: NextRequest) {
       ctxText,
     ].join("\n");
 
-    const resp = await openRouterChatCompletion({
+    const resp = await chatCompletion({
       model: getDashboardModel(),
       messages: [{ role: "system", content: system }],
       temperature: 0.2,

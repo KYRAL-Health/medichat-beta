@@ -17,6 +17,18 @@ Create a `.env.local` file with:
 DATABASE_URL=your_database_connection_string
 JWT_SECRET=your_jwt_secret_key
 NEXT_PUBLIC_REOWN_PROJECT_ID=your_reown_project_id
+
+# AI Configuration
+# Base URL for the OpenAI-compatible API (default: https://openrouter.ai/api/v1)
+AI_API_BASE=https://openrouter.ai/api/v1
+
+# API Key (required)
+AI_API_KEY=your_api_key
+
+# Models (optional, defaults to openai/gpt-4o and openai/gpt-4o-mini)
+AI_MODEL_CHAT=openai/gpt-4o
+AI_MODEL_EXTRACT=openai/gpt-4o-mini
+AI_MODEL_DASHBOARD=openai/gpt-4o-mini
 ```
 
 ### Database Setup

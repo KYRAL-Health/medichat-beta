@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { openRouterChatCompletion } from "@/server/ai/openrouter";
+import { chatCompletion, getExtractModel } from "@/server/ai";
 
 export const DocumentExtractionSchema = z.object({
   demographics: z
@@ -58,10 +58,6 @@ export const DocumentExtractionSchema = z.object({
     )
     .optional(),
 });
-
-function getExtractModel() {
-  return process.env.OPENROUTER_MODEL_EXTRACT ?? process.env.OPENROUTER_MODEL_CHAT ?? "openai/gpt-4o-mini";
-}
 
 function extractJsonObject(text: string): unknown {
   const trimmed = text.trim();
@@ -129,7 +125,7 @@ export async function extractStructuredFromDocumentText(args: {
     "Do not add any commentary outside JSON.",
   ].join("\n");
 
-  const resp = await openRouterChatCompletion({
+  const resp = await chatCompletion({
     model: getExtractModel(),
     messages: [
       { role: "system", content: system },
