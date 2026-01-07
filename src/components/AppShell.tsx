@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { reownAppKit } from "@/context/appkit";
+import { DisclaimerModal } from "@/components/modals/DisclaimerModal";
 
 type Mode = "patient" | "physician";
 type Theme = "light" | "dark";
@@ -125,13 +126,24 @@ function NavLink({
 
 export function AppShell({
   mode,
+  disclaimerAccepted,
   children,
 }: {
   mode: Mode;
+  disclaimerAccepted: boolean;
   children: ReactNode;
 }) {
   const router = useRouter();
   const [theme, setTheme] = useState<Theme>("light");
+  
+  const [hasAcceptedDisclaimer, setHasAcceptedDisclaimer] = useState(disclaimerAccepted);
+  
+  // If the prop updates (due to server revalidation), sync the state
+  useEffect(() => {
+    if (disclaimerAccepted) {
+      setHasAcceptedDisclaimer(true);
+    }
+  }, [disclaimerAccepted]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -164,7 +176,23 @@ export function AppShell({
     applyTheme(next);
   };
 
-  // Patient Navigation Items
+  const handleDisclaimerAccept = async () => {
+    try {
+      const res = await fetch("/api/auth/disclaimer/accept", {
+        method: "POST",
+      });
+      if (res.ok) {
+        setHasAcceptedDisclaimer(true);
+        router.refresh(); // Sync server state
+      } else {
+        console.error("Failed to accept disclaimer");
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+   // Patient Navigation Items
   const patientLinks = [
     {
       href: "/patient/dashboard",
@@ -302,9 +330,13 @@ export function AppShell({
 
   const currentLinks = mode === "physician" ? physicianLinks : patientLinks;
 
-  // Unified Sidebar Layout
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-50 transition-colors duration-200 flex">
+      <DisclaimerModal 
+        open={!hasAcceptedDisclaimer} 
+        onAccept={handleDisclaimerAccept} 
+      />
+
       {/* Sidebar (Desktop) */}
       <aside className="hidden md:flex w-64 flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 fixed inset-y-0 z-20">
         <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center h-14 shrink-0 gap-2">

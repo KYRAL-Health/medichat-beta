@@ -18,6 +18,7 @@ type SessionPayload = {
 export interface AuthenticatedUser {
   id: string;
   walletAddress: string;
+  disclaimerAcceptedAt?: Date | null;
 }
 
 function getJwtSecret() {
@@ -57,7 +58,11 @@ export async function getOrCreateUser(
       .then((rows) => rows[0]);
 
     if (row) {
-      return { id: row.id, walletAddress: row.walletAddress };
+      return { 
+        id: row.id, 
+        walletAddress: row.walletAddress,
+        disclaimerAcceptedAt: row.disclaimerAcceptedAt
+      };
     }
 
     // Extremely defensive fallback.
@@ -65,7 +70,11 @@ export async function getOrCreateUser(
       where: eq(users.walletAddress, walletAddress),
     });
     return existingUser
-      ? { id: existingUser.id, walletAddress: existingUser.walletAddress }
+      ? { 
+          id: existingUser.id, 
+          walletAddress: existingUser.walletAddress,
+          disclaimerAcceptedAt: existingUser.disclaimerAcceptedAt 
+        }
       : null;
   } catch (error) {
     // If DB operations fail (e.g., RLS issues, not configured), return null
