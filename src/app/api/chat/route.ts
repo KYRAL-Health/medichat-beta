@@ -444,7 +444,7 @@ export async function POST(req: NextRequest) {
           m.role === "assistant" &&
           typeof m.content === "string" &&
           m.content.trim()
-      )?.content;
+      )?.content as string;
 
     const assistantText =
       assistantFinal ?? "I’m not sure I understood—could you rephrase?";

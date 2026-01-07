@@ -7,7 +7,7 @@ services:
         # Public Config
         - NEXT_PUBLIC_APP_URL=http://localhost:3000
         # - NEXT_PUBLIC_REOWN_PROJECT_ID=...
-    restart: always
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
@@ -35,7 +35,7 @@ services:
 
   db:
     image: postgres:17-alpine
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
