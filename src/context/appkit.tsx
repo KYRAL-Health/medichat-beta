@@ -42,7 +42,7 @@ const getBaseUrl = () => {
 const createMetadata = () => {
   const baseUrl = getBaseUrl();
   return {
-    name: "MediChat Assistant",
+    name: "MediChat Assistant (Beta)",
     description: "AI-powered medical assistant",
     url: baseUrl,
     icons: [`${baseUrl}/favicon.ico`],

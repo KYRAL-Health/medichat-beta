@@ -341,7 +341,7 @@ export function AppShell({
       <aside className="hidden md:flex w-64 flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 fixed inset-y-0 z-20">
         <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center h-14 shrink-0 gap-2">
           <Link href="/" className="font-semibold text-lg tracking-tight">
-            MediChat
+            MediChat Beta
           </Link>
           <span className="px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] font-medium text-zinc-500 uppercase tracking-wide">
             {mode}

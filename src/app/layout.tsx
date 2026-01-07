@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MediChat Assistant",
+  title: "MediChat Assistant (Beta)",
   description: "AI-powered medical assistant for patients and physicians",
 };
 
