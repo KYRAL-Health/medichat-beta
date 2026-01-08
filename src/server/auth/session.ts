@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { db } from "@/server/db";
 import { users } from "@/server/db/schema";
@@ -12,12 +12,14 @@ const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 type SessionPayload = {
   sub: string;
   walletAddress: string;
+  email?: string | null;
   exp: number;
 };
 
 export interface AuthenticatedUser {
   id: string;
   walletAddress: string;
+  email?: string | null;
   disclaimerAcceptedAt?: Date | null;
 }
 
@@ -29,58 +31,78 @@ function getJwtSecret() {
   return secret;
 }
 
-export function createSessionToken(walletAddress: string) {
-  // Use wallet address as the subject - we'll create DB user lazily when needed
-  return jwt.sign({ sub: walletAddress, walletAddress }, getJwtSecret(), {
+export function createSessionToken(walletAddress: string, userId: string, emailAddress?: string | null): string {
+  // Use the database user ID as the subject
+  return jwt.sign({ sub: userId, walletAddress, email: emailAddress }, getJwtSecret(), {
     expiresIn: SESSION_TTL_SECONDS,
   });
 }
 
 /**
- * Get or create a user in the database based on wallet address.
- * This is called lazily when we actually need a DB user (e.g., to read/write medical data).
- * Returns null if DB is not available/configured (e.g., RLS issues).
+ * Ensure a user exists in the database.
+ * This MUST be called during the auth flow to guarantee the user record exists.
+ * Throws an error if the DB operation fails.
  */
-export async function getOrCreateUser(
-  walletAddress: string
-): Promise<AuthenticatedUser | null> {
+export async function ensureUserRecord(
+  walletAddress: string,
+  email?: string | null
+): Promise<AuthenticatedUser> {
   try {
     // Use an upsert to avoid race conditions (multiple concurrent requests during first login).
-    // This keeps the auth experience clean even when layout+page render in parallel.
-    const row = await db
-      .insert(users)
-      .values({ walletAddress })
-      .onConflictDoUpdate({
-        target: users.walletAddress,
-        set: { updatedAt: new Date() },
-      })
-      .returning()
-      .then((rows) => rows[0]);
+    // Only update `updatedAt` (and `email`) if the provided email actually differs from the
+    // existing value. If no email was provided, do nothing on conflict so we don't touch timestamps.
+    let row;
+    const providedEmail = typeof email !== "undefined" && email !== null;
+
+    if (providedEmail) {
+      // Update only when the excluded email is distinct from the stored one.
+      row = await db
+        .insert(users)
+        .values({ walletAddress, email })
+        .onConflictDoUpdate({
+          target: users.walletAddress,
+          set: { email: sql`excluded.email`, updatedAt: new Date() },
+          setWhere: sql`excluded.email IS DISTINCT FROM ${users.email}`,
+        })
+        .returning()
+        .then((rows) => rows[0]);
+    } else {
+      // No email provided — avoid touching `updatedAt` on conflict.
+      row = await db
+        .insert(users)
+        .values({ walletAddress, email })
+        .onConflictDoNothing()
+        .returning()
+        .then((rows) => rows[0]);
+    }
 
     if (row) {
-      return { 
-        id: row.id, 
+      return {
+        id: row.id,
         walletAddress: row.walletAddress,
-        disclaimerAcceptedAt: row.disclaimerAcceptedAt
+        email: row.email,
+        disclaimerAcceptedAt: row.disclaimerAcceptedAt,
       };
     }
 
-    // Extremely defensive fallback.
+    // Extremely defensive fallback - should not happen with upsert returning
     const existingUser = await db.query.users.findFirst({
       where: eq(users.walletAddress, walletAddress),
     });
-    return existingUser
-      ? { 
-          id: existingUser.id, 
-          walletAddress: existingUser.walletAddress,
-          disclaimerAcceptedAt: existingUser.disclaimerAcceptedAt 
-        }
-      : null;
+    
+    if (!existingUser) {
+        throw new Error("Failed to create or retrieve user");
+    }
+
+    return {
+        id: existingUser.id,
+        walletAddress: existingUser.walletAddress,
+        email: existingUser.email,
+        disclaimerAcceptedAt: existingUser.disclaimerAcceptedAt,
+    };
   } catch (error) {
-    // If DB operations fail (e.g., RLS issues, not configured), return null
-    // This allows the app to work without DB, but DB features won't work
-    console.error("Database operation failed (user may not be configured):", error);
-    return null;
+    console.error("Database operation failed in ensureUserRecord:", error);
+    throw error;
   }
 }
 
@@ -111,7 +133,8 @@ function isSessionPayload(value: unknown): value is SessionPayload {
   return (
     typeof payload.sub === "string" &&
     typeof payload.walletAddress === "string" &&
-    typeof payload.exp === "number"
+    typeof payload.exp === "number" &&
+    (typeof payload.email === "undefined" || typeof payload.email === "string" || payload.email === null)
   );
 }
 
@@ -124,11 +147,11 @@ export async function getAuthenticatedUser(): Promise<AuthenticatedUser | null> 
     const decoded = jwt.verify(token, getJwtSecret());
     if (!isSessionPayload(decoded)) return null;
 
-    // Return wallet-based auth info without DB lookup
-    // DB user will be created lazily when needed
+    // Return auth info from token
     return {
-      id: decoded.sub, // This is the wallet address for now
+      id: decoded.sub, // This is expected to be the user ID (UUID)
       walletAddress: decoded.walletAddress,
+      email: decoded.email ?? null,
     };
   } catch {
     return null;
@@ -136,29 +159,46 @@ export async function getAuthenticatedUser(): Promise<AuthenticatedUser | null> 
 }
 
 /**
- * Get authenticated user with DB record. Creates user lazily if needed.
- * Use this when you need the actual DB user ID (e.g., for foreign keys).
+ * Get authenticated user with DB record.
+ * Expects the user to exist in the database.
+ * No longer creates users lazily.
  */
 export async function getAuthenticatedUserWithDb(): Promise<AuthenticatedUser | null> {
   const authUser = await getAuthenticatedUser();
   if (!authUser) return null;
 
-  // If sub is a UUID, we already have a DB user
-  // Otherwise, it's a wallet address and we need to get/create the DB user
+  // Ideally authUser.id is the UUID from the token (sub)
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     authUser.id
   );
 
   if (isUuid) {
-    // Already a DB user ID, verify it exists
+    // Standard path: verify user exists
     const user = await db.query.users.findFirst({
       where: eq(users.id, authUser.id),
     });
-    return user ? { id: user.id, walletAddress: user.walletAddress } : null;
+    return user
+      ? {
+          id: user.id,
+          walletAddress: user.walletAddress,
+          email: user.email,
+          disclaimerAcceptedAt: user.disclaimerAcceptedAt,
+        }
+      : null;
   }
 
-  // Wallet address - get or create DB user
-  return getOrCreateUser(authUser.walletAddress);
+  // Legacy fallback: Token has wallet address as sub
+  // Try to find user by wallet address (Read-only)
+  const user = await db.query.users.findFirst({
+      where: eq(users.walletAddress, authUser.walletAddress),
+  });
+
+  return user ? {
+       id: user.id,
+        walletAddress: user.walletAddress,
+        email: user.email,
+        disclaimerAcceptedAt: user.disclaimerAcceptedAt,
+  } : null;
 }
 
 export async function requireAuthenticatedUser() {

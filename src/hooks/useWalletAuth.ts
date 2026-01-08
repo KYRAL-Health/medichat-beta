@@ -13,6 +13,7 @@ type AuthStatus =
 interface AuthUser {
   id: string;
   walletAddress: string;
+  email?: string | null;
 }
 
 interface AuthState {
@@ -28,7 +29,7 @@ const initialState: AuthState = {
 };
 
 export function useWalletAuth() {
-  const { address, isConnected } = useAppKitAccount();
+  const { address, isConnected, embeddedWalletInfo } = useAppKitAccount();
   const [state, setState] = useState<AuthState>(initialState);
   const clearedServerSessionOnDisconnectRef = useRef(false);
 
@@ -77,11 +78,13 @@ export function useWalletAuth() {
     try {
       setState((prev) => ({ ...prev, status: "authenticating", error: null }));
 
+      const email = embeddedWalletInfo?.user?.email ?? null;
+
       const res = await fetch("/api/auth/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ walletAddress: address }),
+        body: JSON.stringify({ walletAddress: address, email }),
       });
 
       if (!res.ok) {

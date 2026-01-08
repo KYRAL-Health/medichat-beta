@@ -19,6 +19,7 @@ export const users = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     walletAddress: text("wallet_address").notNull(),
+    email: text("email"), // nullable email for wallet user
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
