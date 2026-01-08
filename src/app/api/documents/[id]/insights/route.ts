@@ -1,17 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq } from "drizzle-orm";
 
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
-import { db } from "@/server/db";
-import {
-  documentExtractions,
-  documents,
-  patientConditions,
-  patientLabResults,
-  patientMedications,
-  patientVitals,
-} from "@/server/db/schema";
+import { getDocumentInsightsData } from "@/server/documents/insights";
 
 export const runtime = "nodejs";
 
@@ -23,12 +14,12 @@ export async function GET(
     const { id } = await params;
     const user = await requireAuthenticatedUser();
 
-    const doc = await db.query.documents.findFirst({
-      where: eq(documents.id, id),
-    });
-    if (!doc) {
+    const data = await getDocumentInsightsData(id);
+    if (!data) {
       return NextResponse.json({ error: "DOCUMENT_NOT_FOUND" }, { status: 404 });
     }
+
+    const { document: doc, extraction, created } = data;
 
     if (doc.patientUserId !== user.id) {
       await assertPatientAccess({
@@ -36,49 +27,6 @@ export async function GET(
         patientUserId: doc.patientUserId,
       });
     }
-
-    // Latest extraction payload (if any).
-    const extraction = await db.query.documentExtractions.findFirst({
-      where: eq(documentExtractions.documentId, doc.id),
-      orderBy: [desc(documentExtractions.createdAt)],
-    });
-
-    // Records created from this document (via sourceDocumentId).
-    const vitals = await db.query.patientVitals.findMany({
-      where: and(
-        eq(patientVitals.patientUserId, doc.patientUserId),
-        eq(patientVitals.sourceDocumentId, doc.id)
-      ),
-      orderBy: [desc(patientVitals.measuredAt)],
-      limit: 200,
-    });
-
-    const labs = await db.query.patientLabResults.findMany({
-      where: and(
-        eq(patientLabResults.patientUserId, doc.patientUserId),
-        eq(patientLabResults.sourceDocumentId, doc.id)
-      ),
-      orderBy: [desc(patientLabResults.collectedAt)],
-      limit: 400,
-    });
-
-    const medications = await db.query.patientMedications.findMany({
-      where: and(
-        eq(patientMedications.patientUserId, doc.patientUserId),
-        eq(patientMedications.sourceDocumentId, doc.id)
-      ),
-      orderBy: [desc(patientMedications.notedAt)],
-      limit: 200,
-    });
-
-    const conditions = await db.query.patientConditions.findMany({
-      where: and(
-        eq(patientConditions.patientUserId, doc.patientUserId),
-        eq(patientConditions.sourceDocumentId, doc.id)
-      ),
-      orderBy: [desc(patientConditions.notedAt)],
-      limit: 200,
-    });
 
     const url = new URL(req.url);
     const basePath = `${url.protocol}//${url.host}`;
@@ -110,7 +58,7 @@ export async function GET(
             createdAt: extraction.createdAt,
           }
         : null,
-      created: { vitals, labs, medications, conditions },
+      created,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHENTICATED") {
@@ -132,5 +80,3 @@ export async function GET(
     );
   }
 }
-
-

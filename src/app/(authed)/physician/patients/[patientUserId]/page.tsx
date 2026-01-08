@@ -1,20 +1,28 @@
 import Link from "next/link";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte, isNull } from "drizzle-orm";
 
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
 import { db } from "@/server/db";
 import {
+  chatMessages,
+  chatThreads,
+  documents,
   patientConditions,
+  patientDailyDashboards,
   patientLabResults,
   patientMedications,
-  patientDailyDashboards,
   patientProfiles,
+  patientRecordSuggestions,
   patientVitals,
+  userMemories,
+  userProfiles,
 } from "@/server/db/schema";
-import { PhysicianPatientDataEntry } from "@/components/PhysicianPatientDataEntry";
-import { DocumentManager } from "@/components/DocumentManager";
 import { DailyDashboardCard } from "@/components/DailyDashboardCard";
+import { ChatPanel } from "@/components/ChatPanel";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { PhysicianPatientDataEntry } from "@/components/PhysicianPatientDataEntry";
 
 export default async function PhysicianPatientDetailPage({
   params,
@@ -23,37 +31,72 @@ export default async function PhysicianPatientDetailPage({
 }) {
   const { patientUserId } = await params;
 
-  // Auth + access enforcement.
   let physicianUserId: string;
   try {
     const physician = await requireAuthenticatedUser();
     physicianUserId = physician.id;
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Unknown error";
-    return (
-      <div className="space-y-3">
-        <h1 className="text-xl font-semibold">Patient</h1>
-        <p className="text-sm text-red-700 dark:text-red-200">Unable to load: {msg}</p>
-      </div>
-    );
+    return <div>Error loading user</div>;
   }
 
   try {
     await assertPatientAccess({ viewerUserId: physicianUserId, patientUserId });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Forbidden";
-    return (
-      <div className="space-y-3">
-        <h1 className="text-xl font-semibold">Patient</h1>
-        <p className="text-sm text-red-700 dark:text-red-200">
-          Access denied: {msg}
-        </p>
-      </div>
-    );
+    return <div>Access denied</div>;
   }
 
-  const profile = await db.query.patientProfiles.findFirst({
-    where: eq(patientProfiles.patientUserId, patientUserId),
+  // --- Fetch Data ---
+  const userProfile = await db.query.userProfiles.findFirst({
+    where: eq(userProfiles.userId, patientUserId),
+  });
+
+  const latestThread = await db.query.chatThreads.findFirst({
+    where: (table, { and, eq }) =>
+      and(eq(table.patientUserId, patientUserId), eq(table.contextMode, "physician")),
+    orderBy: [desc(chatThreads.updatedAt)],
+  });
+
+  let initialMessages: Array<{ role: "user" | "assistant"; content: string }> =
+    [];
+  if (latestThread) {
+    const msgs = await db.query.chatMessages.findMany({
+      where: eq(chatMessages.threadId, latestThread.id),
+      orderBy: [desc(chatMessages.createdAt)],
+      limit: 50,
+    });
+    initialMessages = msgs
+      .reverse()
+      .filter((m) => m.senderRole === "user" || m.senderRole === "assistant")
+      .map((m) => ({
+        role: m.senderRole as "user" | "assistant",
+        content: m.content,
+      }));
+  }
+
+  const pendingMemories = await db.query.userMemories.findMany({
+    where: and(
+      eq(userMemories.ownerUserId, physicianUserId),
+      eq(userMemories.status, "proposed"),
+      eq(userMemories.contextMode, "physician"),
+      eq(userMemories.subjectPatientUserId, patientUserId)
+    ),
+    orderBy: [desc(userMemories.createdAt)],
+  });
+
+  const pendingSuggestions = await db.query.patientRecordSuggestions.findMany({
+    where: and(
+      eq(patientRecordSuggestions.patientUserId, patientUserId),
+      eq(patientRecordSuggestions.status, "proposed")
+    ),
+    orderBy: [desc(patientRecordSuggestions.createdAt)],
+  });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const todaysDashboard = await db.query.patientDailyDashboards.findFirst({
+    where: and(
+      eq(patientDailyDashboards.patientUserId, patientUserId),
+      eq(patientDailyDashboards.date, today)
+    ),
   });
 
   const latestVitals = await db.query.patientVitals.findFirst({
@@ -61,170 +104,160 @@ export default async function PhysicianPatientDetailPage({
     orderBy: [desc(patientVitals.measuredAt)],
   });
 
-  const today = new Date().toISOString().slice(0, 10);
-  const todaysDashboard = await db.query.patientDailyDashboards.findFirst({
-    where: and(eq(patientDailyDashboards.patientUserId, patientUserId), eq(patientDailyDashboards.date, today)),
+  const recentDocs = await db.query.documents.findMany({
+    where: eq(documents.patientUserId, patientUserId),
+    orderBy: [desc(documents.createdAt)],
+    limit: 5,
   });
+
+  const medsCount = await db.$count(
+    patientMedications,
+    and(
+      eq(patientMedications.patientUserId, patientUserId),
+      eq(patientMedications.active, true)
+    )
+  );
+
+  const conditionsCount = await db.$count(
+    patientConditions,
+    eq(patientConditions.patientUserId, patientUserId)
+  );
 
   const recentLabs = await db.query.patientLabResults.findMany({
     where: eq(patientLabResults.patientUserId, patientUserId),
     orderBy: [desc(patientLabResults.collectedAt)],
-    limit: 5,
+    limit: 100,
   });
-
-  const meds = await db.query.patientMedications.findMany({
-    where: eq(patientMedications.patientUserId, patientUserId),
-    orderBy: [desc(patientMedications.notedAt)],
-    limit: 5,
-  });
-
-  const conditions = await db.query.patientConditions.findMany({
-    where: eq(patientConditions.patientUserId, patientUserId),
-    orderBy: [desc(patientConditions.notedAt)],
-    limit: 5,
-  });
+  const recentFlaggedLabsCount = recentLabs.filter((l) => Boolean(l.flag)).length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold">Patient overview</h1>
+    <div className="h-[calc(100vh-4rem)] flex flex-col md:flex-row gap-6 overflow-hidden">
+      {/* Left Pane: Chat */}
+      <div className="flex-1 flex flex-col min-w-0 h-full">
+        <div className="mb-4 space-y-1 shrink-0">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold">
+              {userProfile?.displayName || "Patient"}
+            </h1>
+            <span className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-xs text-zinc-500 font-mono">
+              {patientUserId.slice(0, 8)}
+            </span>
+          </div>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Patient ID: <span className="font-mono text-xs">{patientUserId}</span>
+            Clinical assistant mode. Ask for summaries, red flags, or draft plans.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/physician/patients/${patientUserId}/map`}
-            className="px-3 py-2 text-sm rounded border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900"
-          >
-            Health Map
-          </Link>
-          <Link
-            href={`/physician/chat/${patientUserId}`}
-            className="px-3 py-2 text-sm rounded bg-zinc-900 text-white dark:bg-white dark:text-black"
-          >
-            Chat about patient
-          </Link>
+
+        <div className="flex-1 min-h-0 overflow-y-auto pr-2">
+          <ChatPanel
+            mode="physician"
+            patientUserId={patientUserId}
+            initialThreadId={latestThread?.id}
+            initialMessages={initialMessages}
+            initialProposedMemories={pendingMemories.map((m) => ({
+              id: m.id,
+              memoryText: m.memoryText,
+              category: m.category,
+            }))}
+            initialProposedSuggestions={pendingSuggestions.map((s) => ({
+                id: s.id,
+                kind: s.kind,
+                summaryText: s.summaryText,
+            }))}
+          />
         </div>
       </div>
 
-      <PhysicianPatientDataEntry patientUserId={patientUserId} />
+      {/* Right Pane: Dashboard + Tools */}
+      <div className="w-full md:w-80 lg:w-96 flex flex-col gap-4 h-full overflow-y-auto pb-4 shrink-0 border-l border-zinc-100 pl-0 md:pl-6 dark:border-zinc-900">
+        
+        <DailyDashboardCard
+          patientUserId={patientUserId}
+          initial={
+            todaysDashboard
+              ? {
+                  ...todaysDashboard,
+                  createdAt: todaysDashboard.createdAt.toISOString(),
+                }
+              : null
+          }
+        />
 
-      <DailyDashboardCard
-        patientUserId={patientUserId}
-        initial={
-          todaysDashboard
-            ? {
-                ...todaysDashboard,
-                createdAt: todaysDashboard.createdAt.toISOString(),
-              }
-            : null
-        }
-      />
-
-      <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 space-y-3">
-        <div className="space-y-1">
-          <h2 className="text-sm font-semibold">Documents</h2>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Upload labs/reports for this patient. Parsed data will be visible to the patient too.
-          </p>
-        </div>
-        <DocumentManager patientUserId={patientUserId} />
-      </section>
-
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 space-y-2">
-          <h2 className="text-sm font-semibold">Basics</h2>
-          <div className="text-sm text-zinc-600 dark:text-zinc-400">
-            Age: {profile?.ageYears ?? "—"}
-          </div>
-          <div className="text-sm text-zinc-600 dark:text-zinc-400">
-            Gender: {profile?.gender ?? "—"}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 space-y-2">
-          <h2 className="text-sm font-semibold">Latest vitals</h2>
-          {latestVitals ? (
-            <div className="space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
-              <div>
-                BP:{" "}
-                {latestVitals.systolic && latestVitals.diastolic
-                  ? `${latestVitals.systolic}/${latestVitals.diastolic}`
-                  : "—"}
-              </div>
-              <div>HR: {latestVitals.heartRate ? `${latestVitals.heartRate} bpm` : "—"}</div>
-              <div>
-                Temp: {latestVitals.temperatureC ? `${latestVitals.temperatureC}°C` : "—"}
-              </div>
+        <Card className="p-4 space-y-3">
+          <h2 className="text-sm font-semibold">Patient Snapshot</h2>
+          <div className="space-y-3 text-sm">
+             <div>
+              <div className="text-xs text-zinc-500">Latest Vitals</div>
+              {latestVitals ? (
+                <div className="font-medium">
+                  {latestVitals.systolic && latestVitals.diastolic
+                    ? `BP ${latestVitals.systolic}/${latestVitals.diastolic}`
+                    : "BP —"}
+                  {" · "}
+                  {latestVitals.heartRate ? `HR ${latestVitals.heartRate}` : "HR —"}
+                </div>
+              ) : (
+                 <div className="text-zinc-500 italic">No vitals recorded</div>
+              )}
             </div>
-          ) : (
-            <div className="text-sm text-zinc-600 dark:text-zinc-400">No vitals yet.</div>
-          )}
-        </div>
-      </section>
 
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 space-y-2">
-          <h2 className="text-sm font-semibold">Recent labs</h2>
-          {recentLabs.length ? (
-            <ul className="space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
-              {recentLabs.map((l) => (
-                <li key={l.id} className="flex items-start justify-between gap-3">
-                  <span className="font-medium text-zinc-900 dark:text-zinc-50">{l.testName}</span>
-                  <span>
-                    {l.valueText}
-                    {l.unit ? ` ${l.unit}` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="text-sm text-zinc-600 dark:text-zinc-400">No labs yet.</div>
-          )}
-        </div>
+            <div className="grid grid-cols-2 gap-2">
+                <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900">
+                    <div className="text-xs text-zinc-500">Active Meds</div>
+                    <div className="text-lg font-semibold">{medsCount}</div>
+                </div>
+                <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900">
+                    <div className="text-xs text-zinc-500">Conditions</div>
+                    <div className="text-lg font-semibold">{conditionsCount}</div>
+                </div>
+            </div>
 
-        <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 space-y-3">
-          <div>
-            <h2 className="text-sm font-semibold">Medications</h2>
-            {meds.length ? (
-              <ul className="space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
-                {meds.map((m) => (
-                  <li key={m.id} className="flex items-start justify-between gap-3">
-                    <span className="font-medium text-zinc-900 dark:text-zinc-50">
-                      {m.medicationName}
-                    </span>
-                    <span>{m.dose ?? "—"}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="text-sm text-zinc-600 dark:text-zinc-400">None listed.</div>
+            {recentFlaggedLabsCount > 0 && (
+                <div className="p-2 rounded bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 border border-red-100 dark:border-red-900/30">
+                    <div className="text-xs font-medium">Recent Flagged Labs</div>
+                    <div className="text-lg font-bold">{recentFlaggedLabsCount}</div>
+                </div>
             )}
           </div>
+        </Card>
 
-          <div>
-            <h2 className="text-sm font-semibold">Conditions</h2>
-            {conditions.length ? (
-              <ul className="space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
-                {conditions.map((c) => (
-                  <li key={c.id} className="flex items-start justify-between gap-3">
-                    <span className="font-medium text-zinc-900 dark:text-zinc-50">
-                      {c.conditionName}
-                    </span>
-                    <span>{c.status ?? "—"}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="text-sm text-zinc-600 dark:text-zinc-400">None listed.</div>
-            )}
-          </div>
+        {/* Manual Data Entry (Collapsed by default or simple form) */}
+        <div className="space-y-2">
+            <h2 className="text-sm font-semibold px-1">Actions</h2>
+            <PhysicianPatientDataEntry patientUserId={patientUserId} />
         </div>
-      </section>
+
+        <Card className="p-4 space-y-3 flex-1 flex flex-col min-h-[200px]">
+           <div className="flex items-center justify-between shrink-0">
+            <h2 className="text-sm font-semibold">Documents</h2>
+           </div>
+           
+           <div className="flex-1 overflow-y-auto">
+               {recentDocs.length > 0 ? (
+                   <ul className="space-y-2">
+                       {recentDocs.map(doc => (
+                           <li key={doc.id} className="text-sm">
+                               <div className="font-medium truncate" title={doc.originalFileName}>
+                                   {doc.originalFileName}
+                               </div>
+                               <div className="flex items-center justify-between text-xs text-zinc-500 mt-0.5">
+                                   <span>{new Date(doc.createdAt).toLocaleDateString()}</span>
+                                   <span className={doc.status === 'parsed' ? 'text-green-600 dark:text-green-400' : ''}>
+                                       {doc.status}
+                                   </span>
+                               </div>
+                           </li>
+                       ))}
+                   </ul>
+               ) : (
+                   <div className="h-full flex flex-col items-center justify-center text-center p-4">
+                       <p className="text-sm text-zinc-500">No documents yet</p>
+                   </div>
+               )}
+           </div>
+        </Card>
+
+      </div>
     </div>
   );
 }
-
-

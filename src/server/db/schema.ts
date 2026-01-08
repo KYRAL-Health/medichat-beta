@@ -425,6 +425,49 @@ export const userMemories = pgTable(
   })
 );
 
+export const recordSuggestionKindEnum = pgEnum("record_suggestion_kind", [
+  "profile_update",
+  "vital",
+  "lab",
+  "medication",
+  "condition",
+]);
+
+export const recordSuggestionStatusEnum = pgEnum("record_suggestion_status", [
+  "proposed",
+  "accepted",
+  "rejected",
+]);
+
+export const patientRecordSuggestions = pgTable(
+  "patient_record_suggestions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    patientUserId: uuid("patient_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: recordSuggestionKindEnum("kind").notNull(),
+    summaryText: text("summary_text").notNull(),
+    payloadJson: jsonb("payload_json").notNull(),
+    status: recordSuggestionStatusEnum("status").notNull().default("proposed"),
+    sourceThreadId: uuid("source_thread_id").references(() => chatThreads.id, {
+      onDelete: "set null",
+    }),
+    sourceMessageId: uuid("source_message_id").references(() => chatMessages.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    patientIdx: index("patient_record_suggestions_patient_idx").on(table.patientUserId),
+    statusIdx: index("patient_record_suggestions_status_idx").on(
+      table.patientUserId,
+      table.status
+    ),
+  })
+);
+
 export const usersRelations = relations(users, ({ one, many }) => ({
   profile: one(userProfiles, {
     fields: [users.id],
@@ -439,6 +482,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   vitals: many(patientVitals),
   labs: many(patientLabResults),
   documents: many(documents),
+  recordSuggestions: many(patientRecordSuggestions),
 }));
 
 export const userProfilesRelations = relations(userProfiles, ({ one }) => ({
@@ -529,6 +573,24 @@ export const userMemoriesRelations = relations(userMemories, ({ one }) => ({
   }),
 }));
 
+export const patientRecordSuggestionsRelations = relations(
+  patientRecordSuggestions,
+  ({ one }) => ({
+    patient: one(users, {
+      fields: [patientRecordSuggestions.patientUserId],
+      references: [users.id],
+    }),
+    thread: one(chatThreads, {
+      fields: [patientRecordSuggestions.sourceThreadId],
+      references: [chatThreads.id],
+    }),
+    message: one(chatMessages, {
+      fields: [patientRecordSuggestions.sourceMessageId],
+      references: [chatMessages.id],
+    }),
+  })
+);
+
 export type User = typeof users.$inferSelect;
 export type UserProfile = typeof userProfiles.$inferSelect;
 export type PatientProfile = typeof patientProfiles.$inferSelect;
@@ -545,4 +607,4 @@ export type PatientDailyDashboard = typeof patientDailyDashboards.$inferSelect;
 export type ChatThread = typeof chatThreads.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type UserMemory = typeof userMemories.$inferSelect;
-
+export type PatientRecordSuggestion = typeof patientRecordSuggestions.$inferSelect;

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { LoadingDots } from "@/components/LoadingDots";
+import { PatientNameEditor } from "@/components/PatientNameEditor";
 
 type Profile = {
   ageYears: number | null;
@@ -19,7 +20,7 @@ function FieldLabel({ children }: { children: string }) {
   return <div className="text-xs text-zinc-500 dark:text-zinc-400">{children}</div>;
 }
 
-export function PatientDataForm() {
+export function PatientDataForm({ patientUserId, initialName }: { patientUserId: string; initialName: string | null }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -265,6 +266,16 @@ export function PatientDataForm() {
           {notice}
         </div>
       ) : null}
+
+      <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold">Your Identity</h2>
+        </div>
+        <div className="bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded-md">
+            <PatientNameEditor patientUserId={patientUserId} initialName={initialName} />
+            <p className="text-xs text-zinc-500 mt-1">This name is visible to your physicians.</p>
+        </div>
+      </section>
 
       <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 space-y-4">
         <div className="flex items-center justify-between gap-3">
@@ -574,5 +585,3 @@ export function PatientDataForm() {
     </div>
   );
 }
-
-

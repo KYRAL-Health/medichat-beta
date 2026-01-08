@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { requireAuthenticatedUser } from "@/server/auth/session";
@@ -9,12 +9,14 @@ import {
   type OpenRouterTool,
 } from "@/server/ai/openrouter";
 import { proposeMemory, retrieveMemories } from "@/server/ai/tools";
+import { proposePatientRecordSuggestion } from "@/server/ai/patientTools";
 import { db } from "@/server/db";
-import { chatMessages, chatThreads } from "@/server/db/schema";
+import { chatMessages, chatThreads, documents } from "@/server/db/schema";
 import {
   buildPatientContext,
   stringifyPatientContext,
 } from "@/server/patients/context";
+import { getDocumentInsightsData } from "@/server/documents/insights";
 
 export const runtime = "nodejs";
 
@@ -23,6 +25,7 @@ const ChatSchema = z.object({
   patientUserId: z.string().uuid().optional(),
   threadId: z.string().uuid().optional(),
   message: z.string().min(1).max(8000),
+  documentIds: z.array(z.string().uuid()).optional(),
 });
 
 function getChatModel() {
@@ -52,7 +55,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { mode, message } = parsed.data;
+    const { mode, message, documentIds } = parsed.data;
     const patientUserId =
       mode === "patient" ? user.id : parsed.data.patientUserId ?? null;
 
@@ -65,6 +68,19 @@ export async function POST(req: NextRequest) {
 
     if (mode === "physician") {
       await assertPatientAccess({ viewerUserId: user.id, patientUserId });
+    }
+
+    // Verify document access if provided
+    let docContext = "";
+    if (documentIds?.length) {
+      const docs = await db.query.documents.findMany({
+        where: inArray(documents.id, documentIds),
+      });
+      
+      const validDocs = docs.filter(d => d.patientUserId === patientUserId);
+      if (validDocs.length) {
+        docContext = `\n\nThe user has attached the following documents to this message:\n${validDocs.map(d => `- ${d.originalFileName} (ID: ${d.id})`).join("\n")}\nYou can use the 'getDocumentInsights' tool to read their contents.`;
+      }
     }
 
     // Ensure thread exists
@@ -129,9 +145,11 @@ export async function POST(req: NextRequest) {
       "Personalization:",
       "- Use retrieveMemories to fetch accepted memories for the current user (patient context only).",
       "- If you learn something stable/useful (health history, preferences, goals), you MAY call logMemory to propose remembering it.",
+      "- If you learn a concrete fact suitable for the medical record (meds, vitals, diagnosis, or profile change), call proposePatientRecordSuggestion.",
       "- Only propose memories that are clear, specific, and likely to remain true.",
       "",
       patientCtxText,
+      docContext,
     ].join("\n");
 
     const physicianSystem = [
@@ -147,9 +165,11 @@ export async function POST(req: NextRequest) {
       "Personalization:",
       "- Use retrieveMemories to fetch accepted memories for the clinician, scoped to this patient and physician mode.",
       "- You MAY call logMemory to propose remembering stable patient-specific context for this clinician (e.g., 'Patient reports X baseline').",
+      "- If you identify a concrete update for the medical record, call proposePatientRecordSuggestion.",
       "- Only propose memories that are clear, specific, and likely to remain true.",
       "",
       patientCtxText,
+      docContext,
     ].join("\n");
 
     const tools: OpenRouterTool[] = [
@@ -185,6 +205,43 @@ export async function POST(req: NextRequest) {
           },
         },
       },
+      {
+        type: "function",
+        function: {
+          name: "getDocumentInsights",
+          description:
+            "Read insights and extracted data from a specific document attached to this conversation.",
+          parameters: {
+            type: "object",
+            properties: {
+              documentId: { type: "string", description: "The UUID of the document to read." },
+            },
+            required: ["documentId"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "proposePatientRecordSuggestion",
+          description: "Propose a structured update to the patient's record (vitals, labs, medications, conditions, or profile).",
+          parameters: {
+            type: "object",
+            properties: {
+              kind: { type: "string", enum: ["profile_update", "vital", "lab", "medication", "condition"] },
+              summaryText: { type: "string", description: "Human readable summary of what is being changed/added." },
+              payloadJson: {
+                type: "object",
+                description: "The structured data for the update. Fields match the database schema for the kind.",
+                additionalProperties: true,
+              },
+            },
+            required: ["kind", "summaryText", "payloadJson"],
+            additionalProperties: false,
+          },
+        },
+      },
     ];
 
     const system = mode === "physician" ? physicianSystem : patientSystem;
@@ -197,10 +254,6 @@ export async function POST(req: NextRequest) {
     }> = [{ role: "system", content: system }];
 
     for (const m of chronological) {
-      // For now, filter out tool messages because we don't store tool_calls JSON
-      // in the DB, so we can't reconstruct the valid tool call chain required by OpenRouter.
-      // This is a tradeoff: we lose some history of *what* happened in tools, but
-      // we keep the chat functional.
       if (m.senderRole === "tool") {
         continue;
       } else if (m.senderRole === "assistant") {
@@ -214,6 +267,12 @@ export async function POST(req: NextRequest) {
       id: string;
       memoryText: string;
       category: string | null;
+    }> = [];
+
+    const proposedSuggestions: Array<{
+        id: string;
+        kind: string;
+        summaryText: string;
     }> = [];
 
     // Tool loop (max 3 iterations)
@@ -293,6 +352,90 @@ export async function POST(req: NextRequest) {
             name: call.function.name,
             content: JSON.stringify({ ok: true, memoryId: mem.id }),
           });
+        } else if (call.function.name === "getDocumentInsights") {
+            const args = safeJsonParse<{ documentId: string }>(call.function.arguments);
+            if (!args?.documentId) {
+                convo.push({
+                    role: "tool",
+                    tool_call_id: call.id,
+                    name: call.function.name,
+                    content: JSON.stringify({ error: "MISSING_DOCUMENT_ID" }),
+                });
+                continue;
+            }
+            
+            // Check access again just to be safe, though context limited IDs usually.
+            // But here the model can call with ANY ID. So we must verify access.
+            const doc = await db.query.documents.findFirst({
+                where: eq(documents.id, args.documentId)
+            });
+            
+            if (!doc || doc.patientUserId !== patientUserId) {
+                 convo.push({
+                    role: "tool",
+                    tool_call_id: call.id,
+                    name: call.function.name,
+                    content: JSON.stringify({ error: "DOCUMENT_NOT_FOUND_OR_ACCESS_DENIED" }),
+                });
+                continue;
+            }
+
+            const data = await getDocumentInsightsData(args.documentId);
+            convo.push({
+                role: "tool",
+                tool_call_id: call.id,
+                name: call.function.name,
+                content: JSON.stringify({ 
+                    filename: data?.document.originalFileName,
+                    extracted: data?.extraction?.extractedJson,
+                    ingested: data?.created
+                }),
+            });
+        } else if (call.function.name === "proposePatientRecordSuggestion") {
+            const args = safeJsonParse<{
+                kind: "profile_update" | "vital" | "lab" | "medication" | "condition";
+                summaryText: string;
+                payloadJson: Record<string, unknown>;
+            }>(call.function.arguments);
+
+            if (!args?.kind || !args.summaryText || !args.payloadJson) {
+                convo.push({
+                    role: "tool",
+                    tool_call_id: call.id,
+                    name: call.function.name,
+                    content: JSON.stringify({ error: "MISSING_ARGS" }),
+                });
+                continue;
+            }
+
+            try {
+                const suggestion = await proposePatientRecordSuggestion({
+                    patientUserId,
+                    kind: args.kind,
+                    summaryText: args.summaryText,
+                    payloadJson: args.payloadJson,
+                    sourceThreadId: threadId,
+                    sourceMessageId: userMsg?.id ?? null,
+                });
+                proposedSuggestions.push({
+                    id: suggestion.id,
+                    kind: suggestion.kind,
+                    summaryText: suggestion.summaryText
+                });
+                convo.push({
+                    role: "tool",
+                    tool_call_id: call.id,
+                    name: call.function.name,
+                    content: JSON.stringify({ ok: true, suggestionId: suggestion.id }),
+                });
+            } catch (e) {
+                convo.push({
+                    role: "tool",
+                    tool_call_id: call.id,
+                    name: call.function.name,
+                    content: JSON.stringify({ error: "SUGGESTION_FAILED" }),
+                });
+            }
         } else {
           convo.push({
             role: "tool",
@@ -338,6 +481,7 @@ export async function POST(req: NextRequest) {
       threadId,
       message: savedAssistant,
       proposedMemories,
+      proposedSuggestions,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHENTICATED") {
