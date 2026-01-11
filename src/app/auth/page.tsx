@@ -6,6 +6,7 @@ import { useAppKit, useAppKitAccount } from "@reown/appkit/react";
 
 import { LoadingDots } from "@/components/LoadingDots";
 import { useWalletAuth } from "@/hooks/useWalletAuth";
+import { DisclaimerModal } from "@/components/DisclaimerModal";
 
 type Theme = "light" | "dark";
 
@@ -57,6 +58,8 @@ export default function AuthPage() {
   const { open } = useAppKit();
   const { isConnected } = useAppKitAccount();
   const [theme, setTheme] = useState<Theme>("light");
+  const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
 
   useEffect(() => {
     if (walletAuth.status === "authenticated") {
@@ -66,12 +69,31 @@ export default function AuthPage() {
 
   useEffect(() => {
     setTheme(document.documentElement.classList.contains("dark") ? "dark" : "light");
+    
+    // Check if disclaimer was already accepted
+    const accepted = localStorage.getItem("medichat_disclaimer_accepted");
+    if (accepted === "true") {
+      setDisclaimerAccepted(true);
+    } else {
+      setShowDisclaimer(true);
+    }
   }, []);
+
+  const handleDisclaimerAccept = () => {
+    setDisclaimerAccepted(true);
+    setShowDisclaimer(false);
+    localStorage.setItem("medichat_disclaimer_accepted", "true");
+  };
 
   const isLoading =
     walletAuth.status === "checking" || walletAuth.status === "authenticating";
 
   const handleSignIn = () => {
+    if (!disclaimerAccepted) {
+      setShowDisclaimer(true);
+      return;
+    }
+
     if (!isConnected) {
       open();
     } else if (walletAuth.status === "unauthenticated") {
@@ -81,6 +103,11 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-zinc-50 dark:bg-black transition-colors duration-200 relative">
+      <DisclaimerModal 
+        open={showDisclaimer} 
+        onAccept={handleDisclaimerAccept} 
+      />
+
       <div className="absolute top-4 right-4">
         <button
           type="button"
@@ -126,9 +153,17 @@ export default function AuthPage() {
           )}
         </button>
 
-        <p className="text-xs text-zinc-500 dark:text-zinc-500">
-          Connect with Reown to create a session. Email login is supported.
-        </p>
+        <div className="text-center space-y-2">
+          <p className="text-xs text-zinc-500 dark:text-zinc-500">
+            By signing in, you accept our{" "}
+            <a href="/terms" className="underline hover:text-zinc-900 dark:hover:text-zinc-300">Terms of Service</a>
+            {" "}and{" "}
+            <a href="/privacy" className="underline hover:text-zinc-900 dark:hover:text-zinc-300">Privacy Policy</a>.
+          </p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-500">
+            Connect with Reown to create a session. Email login is supported.
+          </p>
+        </div>
       </div>
     </div>
   );

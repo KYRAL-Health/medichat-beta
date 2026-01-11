@@ -14,7 +14,7 @@ export function MobileSplitLayout({
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col md:flex-row gap-6 overflow-hidden relative">
       {/* Mobile Tabs */}
-      <div className="md:hidden flex shrink-0 border-b border-zinc-200 dark:border-zinc-800">
+      <div className="md:hidden flex shrink-0 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-10 bg-zinc-50 dark:bg-black">
         <button
           onClick={() => setActiveTab("chat")}
           className={`flex-1 py-2 text-sm font-medium ${

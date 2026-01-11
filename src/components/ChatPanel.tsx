@@ -340,7 +340,7 @@ export function ChatPanel({
                           <button
                             onClick={(e) => deleteThread(t.id, e)}
                             disabled={deletingThreadId === t.id}
-                            className="opacity-0 group-hover:opacity-100 p-1 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-opacity"
+                            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-opacity"
                             title="Delete Chat"
                           >
                               {deletingThreadId === t.id ? (
