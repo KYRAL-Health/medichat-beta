@@ -22,7 +22,7 @@ import { DailyDashboardCard } from "@/components/DailyDashboardCard";
 import { ChatPanel } from "@/components/ChatPanel";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { PhysicianPatientDataEntry } from "@/components/PhysicianPatientDataEntry";
+import { PhysicianPatientDataPanel } from "@/components/PhysicianPatientDataPanel";
 import { MobileSplitLayout } from "@/components/MobileSplitLayout";
 
 export default async function PhysicianPatientDetailPage({
@@ -105,12 +105,6 @@ export default async function PhysicianPatientDetailPage({
     orderBy: [desc(patientVitals.measuredAt)],
   });
 
-  const recentDocs = await db.query.documents.findMany({
-    where: eq(documents.patientUserId, patientUserId),
-    orderBy: [desc(documents.createdAt)],
-    limit: 5,
-  });
-
   const medsCount = await db.$count(
     patientMedications,
     and(
@@ -185,41 +179,11 @@ export default async function PhysicianPatientDetailPage({
             </div>
           </Card>
 
-          {/* Manual Data Entry (Collapsed by default or simple form) */}
+          {/* Patient Records Panel */}
           <div className="space-y-2">
-              <h2 className="text-sm font-semibold px-1">Actions</h2>
-              <PhysicianPatientDataEntry patientUserId={patientUserId} />
+              <h2 className="text-sm font-semibold px-1">Patient Records</h2>
+              <PhysicianPatientDataPanel patientUserId={patientUserId} />
           </div>
-
-          <Card className="p-4 space-y-3 flex-1 flex flex-col min-h-[200px]">
-             <div className="flex items-center justify-between shrink-0">
-              <h2 className="text-sm font-semibold">Documents</h2>
-             </div>
-             
-             <div className="flex-1 overflow-y-auto">
-                 {recentDocs.length > 0 ? (
-                     <ul className="space-y-2">
-                         {recentDocs.map(doc => (
-                             <li key={doc.id} className="text-sm">
-                                 <div className="font-medium truncate" title={doc.originalFileName}>
-                                     {doc.originalFileName}
-                                 </div>
-                                 <div className="flex items-center justify-between text-xs text-zinc-500 mt-0.5">
-                                     <span>{new Date(doc.createdAt).toLocaleDateString()}</span>
-                                     <span className={doc.status === 'parsed' ? 'text-green-600 dark:text-green-400' : ''}>
-                                         {doc.status}
-                                     </span>
-                                 </div>
-                             </li>
-                         ))}
-                     </ul>
-                 ) : (
-                     <div className="h-full flex flex-col items-center justify-center text-center p-4">
-                         <p className="text-sm text-zinc-500">No documents yet</p>
-                     </div>
-                 )}
-             </div>
-          </Card>
         </>
       }
     >
