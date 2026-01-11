@@ -22,6 +22,7 @@ import { ChatPanel } from "@/components/ChatPanel";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PatientNameEditor } from "@/components/PatientNameEditor";
+import { MobileSplitLayout } from "@/components/MobileSplitLayout";
 
 export default async function PatientDashboardPage() {
   let userId: string;
@@ -130,150 +131,143 @@ export default async function PatientDashboardPage() {
 
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col md:flex-row gap-6 overflow-hidden">
-      {/* Left Pane: Chat (Primary) */}
-      <div className="flex-1 flex flex-col min-w-0 h-full">
-         <div className="mb-4 space-y-1 shrink-0">
-          <PatientNameEditor 
-            patientUserId={userId} 
-            initialName={userProfile?.displayName ?? null} 
-          />
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Your personal health assistant. Ask about symptoms, review records, or plan next steps.
-          </p>
-        </div>
-        
-        <div className="flex-1 min-h-0 overflow-y-auto pr-2">
-           <ChatPanel
-            mode="patient"
+    <MobileSplitLayout
+      dashboard={
+        <>
+          <DailyDashboardCard
             patientUserId={userId}
-            initialThreadId={latestThread?.id}
-            initialMessages={initialMessages}
-            initialProposedMemories={pendingMemories.map((m) => ({
-              id: m.id,
-              memoryText: m.memoryText,
-              category: m.category,
-            }))}
-            initialProposedSuggestions={pendingSuggestions.map((s) => ({
-                id: s.id,
-                kind: s.kind,
-                summaryText: s.summaryText,
-            }))}
+            initial={
+              todaysDashboard
+                ? {
+                    ...todaysDashboard,
+                    createdAt: todaysDashboard.createdAt.toISOString(),
+                  }
+                : null
+            }
           />
-        </div>
-      </div>
 
-      {/* Right Pane: Supporting Dashboard */}
-      <div className="w-full md:w-80 lg:w-96 flex flex-col gap-4 h-full overflow-y-auto pb-4 shrink-0 border-l border-zinc-100 pl-0 md:pl-6 dark:border-zinc-900">
-        
-        {/* AI Daily Overview */}
-        <DailyDashboardCard
-          patientUserId={userId}
-          initial={
-            todaysDashboard
-              ? {
-                  ...todaysDashboard,
-                  createdAt: todaysDashboard.createdAt.toISOString(),
-                }
-              : null
-          }
-        />
+          <Card className="p-4 space-y-3">
+            <h2 className="text-sm font-semibold">Quick Snapshot</h2>
+            <div className="space-y-3 text-sm">
+               <div>
+                <div className="text-xs text-zinc-500">Latest Vitals</div>
+                {latestVitals ? (
+                  <div className="font-medium">
+                    {latestVitals.systolic && latestVitals.diastolic
+                      ? `BP ${latestVitals.systolic}/${latestVitals.diastolic}`
+                      : "BP —"}
+                    {" · "}
+                    {latestVitals.heartRate ? `HR ${latestVitals.heartRate}` : "HR —"}
+                  </div>
+                ) : (
+                   <div className="text-zinc-500 italic">No vitals recorded</div>
+                )}
+              </div>
 
-        {/* Quick Health Snapshot */}
-        <Card className="p-4 space-y-3">
-          <h2 className="text-sm font-semibold">Quick Snapshot</h2>
-          <div className="space-y-3 text-sm">
-             <div>
-              <div className="text-xs text-zinc-500">Latest Vitals</div>
-              {latestVitals ? (
-                <div className="font-medium">
-                  {latestVitals.systolic && latestVitals.diastolic
-                    ? `BP ${latestVitals.systolic}/${latestVitals.diastolic}`
-                    : "BP —"}
-                  {" · "}
-                  {latestVitals.heartRate ? `HR ${latestVitals.heartRate}` : "HR —"}
-                </div>
-              ) : (
-                 <div className="text-zinc-500 italic">No vitals recorded</div>
+              <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900">
+                      <div className="text-xs text-zinc-500">Active Meds</div>
+                      <div className="text-lg font-semibold">{medsCount}</div>
+                  </div>
+                  <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900">
+                      <div className="text-xs text-zinc-500">Conditions</div>
+                      <div className="text-lg font-semibold">{conditionsCount}</div>
+                  </div>
+              </div>
+
+              {recentFlaggedLabsCount > 0 && (
+                  <div className="p-2 rounded bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 border border-red-100 dark:border-red-900/30">
+                      <div className="text-xs font-medium">Recent Flagged Labs</div>
+                      <div className="text-lg font-bold">{recentFlaggedLabsCount}</div>
+                  </div>
               )}
             </div>
+          </Card>
 
-            <div className="grid grid-cols-2 gap-2">
-                <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900">
-                    <div className="text-xs text-zinc-500">Active Meds</div>
-                    <div className="text-lg font-semibold">{medsCount}</div>
-                </div>
-                <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900">
-                    <div className="text-xs text-zinc-500">Conditions</div>
-                    <div className="text-lg font-semibold">{conditionsCount}</div>
-                </div>
-            </div>
+          <Card className="p-4 space-y-3 flex-1 flex flex-col min-h-0">
+             <div className="flex items-center justify-between shrink-0">
+              <h2 className="text-sm font-semibold">Recent Docs</h2>
+              <Link href="/patient/documents" className="text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300">
+                  View all
+              </Link>
+             </div>
+             
+             <div className="flex-1 overflow-y-auto min-h-[100px]">
+                 {recentDocs.length > 0 ? (
+                     <ul className="space-y-2">
+                         {recentDocs.map(doc => (
+                             <li key={doc.id} className="text-sm">
+                                 <div className="font-medium truncate" title={doc.originalFileName}>
+                                     {doc.originalFileName}
+                                 </div>
+                                 <div className="flex items-center justify-between text-xs text-zinc-500 mt-0.5">
+                                     <span>{new Date(doc.createdAt).toLocaleDateString()}</span>
+                                     <span className={doc.status === 'parsed' ? 'text-green-600 dark:text-green-400' : ''}>
+                                         {doc.status}
+                                     </span>
+                                 </div>
+                                 {doc.status === 'parsed' && (
+                                     <Link 
+                                      href={`/patient/documents?insights=${doc.id}`}
+                                      className="text-xs text-blue-600 dark:text-blue-400 hover:underline block mt-1"
+                                     >
+                                      View insights
+                                     </Link>
+                                 )}
+                             </li>
+                         ))}
+                     </ul>
+                 ) : (
+                     <div className="h-full flex flex-col items-center justify-center text-center p-4">
+                         <div className="p-3 rounded-full bg-zinc-100 dark:bg-zinc-900 mb-2">
+                             <svg className="w-5 h-5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                             </svg>
+                         </div>
+                         <p className="text-sm text-zinc-500">No documents yet</p>
+                     </div>
+                 )}
+             </div>
 
-            {recentFlaggedLabsCount > 0 && (
-                <div className="p-2 rounded bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 border border-red-100 dark:border-red-900/30">
-                    <div className="text-xs font-medium">Recent Flagged Labs</div>
-                    <div className="text-lg font-bold">{recentFlaggedLabsCount}</div>
-                </div>
-            )}
-          </div>
-        </Card>
-
-        {/* Recent Documents */}
-        <Card className="p-4 space-y-3 flex-1 flex flex-col min-h-0">
-           <div className="flex items-center justify-between shrink-0">
-            <h2 className="text-sm font-semibold">Recent Docs</h2>
-            <Link href="/patient/documents" className="text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300">
-                View all
-            </Link>
-           </div>
-           
-           <div className="flex-1 overflow-y-auto min-h-[100px]">
-               {recentDocs.length > 0 ? (
-                   <ul className="space-y-2">
-                       {recentDocs.map(doc => (
-                           <li key={doc.id} className="text-sm">
-                               <div className="font-medium truncate" title={doc.originalFileName}>
-                                   {doc.originalFileName}
-                               </div>
-                               <div className="flex items-center justify-between text-xs text-zinc-500 mt-0.5">
-                                   <span>{new Date(doc.createdAt).toLocaleDateString()}</span>
-                                   <span className={doc.status === 'parsed' ? 'text-green-600 dark:text-green-400' : ''}>
-                                       {doc.status}
-                                   </span>
-                               </div>
-                               {doc.status === 'parsed' && (
-                                   <Link 
-                                    href={`/patient/documents?insights=${doc.id}`}
-                                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline block mt-1"
-                                   >
-                                    View insights
-                                   </Link>
-                               )}
-                           </li>
-                       ))}
-                   </ul>
-               ) : (
-                   <div className="h-full flex flex-col items-center justify-center text-center p-4">
-                       <div className="p-3 rounded-full bg-zinc-100 dark:bg-zinc-900 mb-2">
-                           <svg className="w-5 h-5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                           </svg>
-                       </div>
-                       <p className="text-sm text-zinc-500">No documents yet</p>
-                   </div>
-               )}
-           </div>
-
-           <div className="pt-2 shrink-0">
-                <Link href="/patient/documents">
-                    <Button variant="outline" size="sm" className="w-full">
-                        Upload Document
-                    </Button>
-                </Link>
-           </div>
-        </Card>
-
+             <div className="pt-2 shrink-0">
+                  <Link href="/patient/documents">
+                      <Button variant="outline" size="sm" className="w-full">
+                          Upload Document
+                      </Button>
+                  </Link>
+             </div>
+          </Card>
+        </>
+      }
+    >
+      <div className="mb-4 space-y-1 shrink-0">
+        <PatientNameEditor 
+          patientUserId={userId} 
+          initialName={userProfile?.displayName ?? null} 
+        />
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          Your personal health assistant. Ask about symptoms, review records, or plan next steps.
+        </p>
       </div>
-    </div>
+      
+      <div className="flex-1 min-h-0 overflow-y-auto pr-2">
+         <ChatPanel
+          mode="patient"
+          patientUserId={userId}
+          initialThreadId={latestThread?.id}
+          initialMessages={initialMessages}
+          initialProposedMemories={pendingMemories.map((m) => ({
+            id: m.id,
+            memoryText: m.memoryText,
+            category: m.category,
+          }))}
+          initialProposedSuggestions={pendingSuggestions.map((s) => ({
+              id: s.id,
+              kind: s.kind,
+              summaryText: s.summaryText,
+          }))}
+        />
+      </div>
+    </MobileSplitLayout>
   );
 }

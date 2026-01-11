@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
 
 import { LoadingDots } from "@/components/LoadingDots";
 import { PatientNameEditor } from "@/components/PatientNameEditor";
@@ -17,10 +23,18 @@ type Profile = {
 } | null;
 
 function FieldLabel({ children }: { children: string }) {
-  return <div className="text-xs text-zinc-500 dark:text-zinc-400">{children}</div>;
+  return (
+    <div className="text-xs text-zinc-500 dark:text-zinc-400">{children}</div>
+  );
 }
 
-export function PatientDataForm({ patientUserId, initialName }: { patientUserId: string; initialName: string | null }) {
+export function PatientDataForm({
+  patientUserId,
+  initialName,
+}: {
+  patientUserId: string;
+  initialName: string | null;
+}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -29,8 +43,10 @@ export function PatientDataForm({ patientUserId, initialName }: { patientUserId:
   const [ageYears, setAgeYears] = useState<string>("");
   const [gender, setGender] = useState<string>("unknown");
   const [smokingStatus, setSmokingStatus] = useState<string>("unknown");
-  const [alcoholConsumption, setAlcoholConsumption] = useState<string>("unknown");
-  const [physicalActivityLevel, setPhysicalActivityLevel] = useState<string>("unknown");
+  const [alcoholConsumption, setAlcoholConsumption] =
+    useState<string>("unknown");
+  const [physicalActivityLevel, setPhysicalActivityLevel] =
+    useState<string>("unknown");
   const [hpi, setHpi] = useState<string>("");
   const [symptomOnset, setSymptomOnset] = useState<string>("");
   const [symptomDuration, setSymptomDuration] = useState<string>("");
@@ -40,7 +56,10 @@ export function PatientDataForm({ patientUserId, initialName }: { patientUserId:
     setError(null);
     try {
       const res = await fetch("/api/patient/profile", { cache: "no-store" });
-      const body = (await res.json().catch(() => ({}))) as { profile?: Profile; error?: string };
+      const body = (await res.json().catch(() => ({}))) as {
+        profile?: Profile;
+        error?: string;
+      };
       if (!res.ok) throw new Error(body.error || `Failed (${res.status})`);
 
       const p = body.profile ?? null;
@@ -81,7 +100,9 @@ export function PatientDataForm({ patientUserId, initialName }: { patientUserId:
           physicalActivityLevel,
           historyOfPresentIllness: hpi.trim() ? hpi.trim() : null,
           symptomOnset: symptomOnset.trim() ? symptomOnset.trim() : null,
-          symptomDuration: symptomDuration.trim() ? symptomDuration.trim() : null,
+          symptomDuration: symptomDuration.trim()
+            ? symptomDuration.trim()
+            : null,
         };
 
         const res = await fetch("/api/patient/profile", {
@@ -89,8 +110,12 @@ export function PatientDataForm({ patientUserId, initialName }: { patientUserId:
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        const body = (await res.json().catch(() => ({}))) as { error?: string; profile?: Profile };
-        if (!res.ok) throw new Error(body.error || `Save failed (${res.status})`);
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          profile?: Profile;
+        };
+        if (!res.ok)
+          throw new Error(body.error || `Save failed (${res.status})`);
 
         setProfile(body.profile ?? null);
         setNotice("Saved profile.");
@@ -140,7 +165,8 @@ export function PatientDataForm({ patientUserId, initialName }: { patientUserId:
         body: JSON.stringify(payload),
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(body.error || `Add vitals failed (${res.status})`);
+      if (!res.ok)
+        throw new Error(body.error || `Add vitals failed (${res.status})`);
       setVitalsSystolic("");
       setVitalsDiastolic("");
       setVitalsHr("");
@@ -172,7 +198,8 @@ export function PatientDataForm({ patientUserId, initialName }: { patientUserId:
         }),
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(body.error || `Add lab failed (${res.status})`);
+      if (!res.ok)
+        throw new Error(body.error || `Add lab failed (${res.status})`);
       setLabName("");
       setLabValue("");
       setLabUnit("");
@@ -204,7 +231,8 @@ export function PatientDataForm({ patientUserId, initialName }: { patientUserId:
         }),
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(body.error || `Add medication failed (${res.status})`);
+      if (!res.ok)
+        throw new Error(body.error || `Add medication failed (${res.status})`);
       setMedName("");
       setMedDose("");
       setMedFreq("");
@@ -233,7 +261,8 @@ export function PatientDataForm({ patientUserId, initialName }: { patientUserId:
         }),
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(body.error || `Add condition failed (${res.status})`);
+      if (!res.ok)
+        throw new Error(body.error || `Add condition failed (${res.status})`);
       setConditionName("");
       setConditionStatus("");
       setNotice("Added condition.");
@@ -272,14 +301,25 @@ export function PatientDataForm({ patientUserId, initialName }: { patientUserId:
           <h2 className="text-sm font-semibold">Your Identity</h2>
         </div>
         <div className="bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded-md">
-            <PatientNameEditor patientUserId={patientUserId} initialName={initialName} />
-            <p className="text-xs text-zinc-500 mt-1">This name is visible to your physicians.</p>
+          <PatientNameEditor
+            patientUserId={patientUserId}
+            initialName={initialName}
+          />
+          <p className="text-xs text-zinc-500 mt-1">
+            This name is visible to your physicians.
+          </p>
         </div>
       </section>
 
       <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold">Baseline profile</h2>
+          <div>
+            <h2 className="text-sm font-semibold">Baseline profile</h2>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Only Age and Gender are required for better AI insights. All other
+              fields are optional.
+            </p>
+          </div>
           <button
             type="button"
             onClick={() => void loadProfile()}
@@ -290,9 +330,12 @@ export function PatientDataForm({ patientUserId, initialName }: { patientUserId:
           </button>
         </div>
 
-        <form onSubmit={saveProfile} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form
+          onSubmit={saveProfile}
+          className="grid grid-cols-1 md:grid-cols-2 gap-4"
+        >
           <div className="space-y-1">
-            <FieldLabel>Age</FieldLabel>
+            <FieldLabel>Age (Required)</FieldLabel>
             <input
               value={ageYears}
               onChange={(e) => setAgeYears(e.target.value)}
@@ -302,7 +345,7 @@ export function PatientDataForm({ patientUserId, initialName }: { patientUserId:
           </div>
 
           <div className="space-y-1">
-            <FieldLabel>Gender</FieldLabel>
+            <FieldLabel>Gender (Required)</FieldLabel>
             <select
               value={gender}
               onChange={(e) => setGender(e.target.value)}

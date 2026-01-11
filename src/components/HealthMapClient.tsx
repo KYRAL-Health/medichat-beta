@@ -136,6 +136,7 @@ export function HealthMapClient({
         medications: 0,
         conditions: 0,
         flaggedLabs: 0,
+        
       },
     }));
 
@@ -475,6 +476,5 @@ export function HealthMapClient({
     </section>
   );
 }
-
 
 

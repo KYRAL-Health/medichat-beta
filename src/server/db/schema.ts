@@ -100,7 +100,9 @@ export const patientProfiles = pgTable(
     symptomDuration: text("symptom_duration"),
 
     // Lifestyle
-    smokingStatus: smokingStatusEnum("smoking_status").default("unknown").notNull(),
+    smokingStatus: smokingStatusEnum("smoking_status")
+      .default("unknown")
+      .notNull(),
     alcoholConsumption: alcoholConsumptionEnum("alcohol_consumption")
       .default("unknown")
       .notNull(),
@@ -112,7 +114,9 @@ export const patientProfiles = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => ({
-    patientIdx: uniqueIndex("patient_profiles_patient_unique").on(table.patientUserId),
+    patientIdx: uniqueIndex("patient_profiles_patient_unique").on(
+      table.patientUserId
+    ),
   })
 );
 
@@ -150,7 +154,9 @@ export const patientMedications = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
-    patientIdx: index("patient_medications_patient_idx").on(table.patientUserId),
+    patientIdx: index("patient_medications_patient_idx").on(
+      table.patientUserId
+    ),
   })
 );
 
@@ -171,7 +177,10 @@ export const patientVitals = pgTable(
   },
   (table) => ({
     patientIdx: index("patient_vitals_patient_idx").on(table.patientUserId),
-    measuredIdx: index("patient_vitals_measured_idx").on(table.patientUserId, table.measuredAt),
+    measuredIdx: index("patient_vitals_measured_idx").on(
+      table.patientUserId,
+      table.measuredAt
+    ),
   })
 );
 
@@ -193,7 +202,9 @@ export const patientLabResults = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
-    patientIdx: index("patient_lab_results_patient_idx").on(table.patientUserId),
+    patientIdx: index("patient_lab_results_patient_idx").on(
+      table.patientUserId
+    ),
     collectedIdx: index("patient_lab_results_collected_idx").on(
       table.patientUserId,
       table.collectedAt
@@ -220,8 +231,12 @@ export const patientPhysicianAccess = pgTable(
     revokedAt: timestamp("revoked_at"),
   },
   (table) => ({
-    patientIdx: index("patient_physician_access_patient_idx").on(table.patientUserId),
-    physicianIdx: index("patient_physician_access_physician_idx").on(table.physicianUserId),
+    patientIdx: index("patient_physician_access_patient_idx").on(
+      table.patientUserId
+    ),
+    physicianIdx: index("patient_physician_access_physician_idx").on(
+      table.physicianUserId
+    ),
     uniquePair: uniqueIndex("patient_physician_access_pair_unique").on(
       table.patientUserId,
       table.physicianUserId
@@ -248,7 +263,9 @@ export const accessInvites = pgTable(
   },
   (table) => ({
     inviterIdx: index("access_invites_inviter_idx").on(table.inviterUserId),
-    tokenUnique: uniqueIndex("access_invites_token_hash_unique").on(table.tokenHash),
+    tokenUnique: uniqueIndex("access_invites_token_hash_unique").on(
+      table.tokenHash
+    ),
     kindIdx: index("access_invites_kind_idx").on(table.kind),
   })
 );
@@ -281,7 +298,9 @@ export const documents = pgTable(
   },
   (table) => ({
     patientIdx: index("documents_patient_idx").on(table.patientUserId),
-    uploadedByIdx: index("documents_uploaded_by_idx").on(table.uploadedByUserId),
+    uploadedByIdx: index("documents_uploaded_by_idx").on(
+      table.uploadedByUserId
+    ),
   })
 );
 
@@ -295,7 +314,9 @@ export const documentText = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
-    docUnique: uniqueIndex("document_text_document_unique").on(table.documentId),
+    docUnique: uniqueIndex("document_text_document_unique").on(
+      table.documentId
+    ),
   })
 );
 
@@ -334,7 +355,9 @@ export const patientDailyDashboards = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
-    patientIdx: index("patient_daily_dashboards_patient_idx").on(table.patientUserId),
+    patientIdx: index("patient_daily_dashboards_patient_idx").on(
+      table.patientUserId
+    ),
     uniqueDay: uniqueIndex("patient_daily_dashboards_unique_day").on(
       table.patientUserId,
       table.date
@@ -361,11 +384,18 @@ export const chatThreads = pgTable(
   },
   (table) => ({
     patientIdx: index("chat_threads_patient_idx").on(table.patientUserId),
-    createdByIdx: index("chat_threads_created_by_idx").on(table.createdByUserId),
+    createdByIdx: index("chat_threads_created_by_idx").on(
+      table.createdByUserId
+    ),
   })
 );
 
-export const senderRoleEnum = pgEnum("sender_role", ["user", "assistant", "system", "tool"]);
+export const senderRoleEnum = pgEnum("sender_role", [
+  "user",
+  "assistant",
+  "system",
+  "tool",
+]);
 
 export const chatMessages = pgTable(
   "chat_messages",
@@ -380,11 +410,18 @@ export const chatMessages = pgTable(
   },
   (table) => ({
     threadIdx: index("chat_messages_thread_idx").on(table.threadId),
-    createdIdx: index("chat_messages_created_idx").on(table.threadId, table.createdAt),
+    createdIdx: index("chat_messages_created_idx").on(
+      table.threadId,
+      table.createdAt
+    ),
   })
 );
 
-export const memoryStatusEnum = pgEnum("memory_status", ["proposed", "accepted", "rejected"]);
+export const memoryStatusEnum = pgEnum("memory_status", [
+  "proposed",
+  "accepted",
+  "rejected",
+]);
 
 export const userMemories = pgTable(
   "user_memories",
@@ -396,27 +433,41 @@ export const userMemories = pgTable(
     // Scope memories so patient/physician contexts don't bleed together.
     // For physician-mode memories, `subjectPatientUserId` is the patient being discussed.
     contextMode: contextModeEnum("context_mode").notNull().default("patient"),
-    subjectPatientUserId: uuid("subject_patient_user_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
+    subjectPatientUserId: uuid("subject_patient_user_id").references(
+      () => users.id,
+      {
+        onDelete: "set null",
+      }
+    ),
     status: memoryStatusEnum("status").notNull().default("proposed"),
     memoryText: text("memory_text").notNull(),
     category: text("category"),
     sourceThreadId: uuid("source_thread_id").references(() => chatThreads.id, {
       onDelete: "set null",
     }),
-    sourceMessageId: uuid("source_message_id").references(() => chatMessages.id, {
-      onDelete: "set null",
-    }),
+    sourceMessageId: uuid("source_message_id").references(
+      () => chatMessages.id,
+      {
+        onDelete: "set null",
+      }
+    ),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     acceptedAt: timestamp("accepted_at"),
     rejectedAt: timestamp("rejected_at"),
   },
   (table) => ({
     ownerIdx: index("user_memories_owner_idx").on(table.ownerUserId),
-    statusIdx: index("user_memories_status_idx").on(table.ownerUserId, table.status),
-    contextIdx: index("user_memories_context_idx").on(table.ownerUserId, table.contextMode),
-    ownerStatusCtxSubjectIdx: index("user_memories_owner_status_ctx_subj_idx").on(
+    statusIdx: index("user_memories_status_idx").on(
+      table.ownerUserId,
+      table.status
+    ),
+    contextIdx: index("user_memories_context_idx").on(
+      table.ownerUserId,
+      table.contextMode
+    ),
+    ownerStatusCtxSubjectIdx: index(
+      "user_memories_owner_status_ctx_subj_idx"
+    ).on(
       table.ownerUserId,
       table.status,
       table.contextMode,
@@ -453,14 +504,19 @@ export const patientRecordSuggestions = pgTable(
     sourceThreadId: uuid("source_thread_id").references(() => chatThreads.id, {
       onDelete: "set null",
     }),
-    sourceMessageId: uuid("source_message_id").references(() => chatMessages.id, {
-      onDelete: "set null",
-    }),
+    sourceMessageId: uuid("source_message_id").references(
+      () => chatMessages.id,
+      {
+        onDelete: "set null",
+      }
+    ),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => ({
-    patientIdx: index("patient_record_suggestions_patient_idx").on(table.patientUserId),
+    patientIdx: index("patient_record_suggestions_patient_idx").on(
+      table.patientUserId
+    ),
     statusIdx: index("patient_record_suggestions_status_idx").on(
       table.patientUserId,
       table.status
@@ -489,25 +545,52 @@ export const userProfilesRelations = relations(userProfiles, ({ one }) => ({
   user: one(users, { fields: [userProfiles.userId], references: [users.id] }),
 }));
 
-export const patientProfilesRelations = relations(patientProfiles, ({ one }) => ({
-  user: one(users, { fields: [patientProfiles.patientUserId], references: [users.id] }),
-}));
+export const patientProfilesRelations = relations(
+  patientProfiles,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [patientProfiles.patientUserId],
+      references: [users.id],
+    }),
+  })
+);
 
-export const patientConditionsRelations = relations(patientConditions, ({ one }) => ({
-  patient: one(users, { fields: [patientConditions.patientUserId], references: [users.id] }),
-}));
+export const patientConditionsRelations = relations(
+  patientConditions,
+  ({ one }) => ({
+    patient: one(users, {
+      fields: [patientConditions.patientUserId],
+      references: [users.id],
+    }),
+  })
+);
 
-export const patientMedicationsRelations = relations(patientMedications, ({ one }) => ({
-  patient: one(users, { fields: [patientMedications.patientUserId], references: [users.id] }),
-}));
+export const patientMedicationsRelations = relations(
+  patientMedications,
+  ({ one }) => ({
+    patient: one(users, {
+      fields: [patientMedications.patientUserId],
+      references: [users.id],
+    }),
+  })
+);
 
 export const patientVitalsRelations = relations(patientVitals, ({ one }) => ({
-  patient: one(users, { fields: [patientVitals.patientUserId], references: [users.id] }),
+  patient: one(users, {
+    fields: [patientVitals.patientUserId],
+    references: [users.id],
+  }),
 }));
 
-export const patientLabResultsRelations = relations(patientLabResults, ({ one }) => ({
-  patient: one(users, { fields: [patientLabResults.patientUserId], references: [users.id] }),
-}));
+export const patientLabResultsRelations = relations(
+  patientLabResults,
+  ({ one }) => ({
+    patient: one(users, {
+      fields: [patientLabResults.patientUserId],
+      references: [users.id],
+    }),
+  })
+);
 
 export const patientPhysicianAccessRelations = relations(
   patientPhysicianAccess,
@@ -524,7 +607,10 @@ export const patientPhysicianAccessRelations = relations(
 );
 
 export const accessInvitesRelations = relations(accessInvites, ({ one }) => ({
-  inviter: one(users, { fields: [accessInvites.inviterUserId], references: [users.id] }),
+  inviter: one(users, {
+    fields: [accessInvites.inviterUserId],
+    references: [users.id],
+  }),
   acceptedBy: one(users, {
     fields: [accessInvites.acceptedByUserId],
     references: [users.id],
@@ -532,41 +618,71 @@ export const accessInvitesRelations = relations(accessInvites, ({ one }) => ({
 }));
 
 export const documentsRelations = relations(documents, ({ one }) => ({
-  patient: one(users, { fields: [documents.patientUserId], references: [users.id] }),
-  uploadedBy: one(users, { fields: [documents.uploadedByUserId], references: [users.id] }),
-}));
-
-export const documentTextRelations = relations(documentText, ({ one }) => ({
-  document: one(documents, { fields: [documentText.documentId], references: [documents.id] }),
-}));
-
-export const documentExtractionsRelations = relations(documentExtractions, ({ one }) => ({
-  document: one(documents, {
-    fields: [documentExtractions.documentId],
-    references: [documents.id],
-  }),
-}));
-
-export const patientDailyDashboardsRelations = relations(patientDailyDashboards, ({ one }) => ({
   patient: one(users, {
-    fields: [patientDailyDashboards.patientUserId],
+    fields: [documents.patientUserId],
+    references: [users.id],
+  }),
+  uploadedBy: one(users, {
+    fields: [documents.uploadedByUserId],
     references: [users.id],
   }),
 }));
 
+export const documentTextRelations = relations(documentText, ({ one }) => ({
+  document: one(documents, {
+    fields: [documentText.documentId],
+    references: [documents.id],
+  }),
+}));
+
+export const documentExtractionsRelations = relations(
+  documentExtractions,
+  ({ one }) => ({
+    document: one(documents, {
+      fields: [documentExtractions.documentId],
+      references: [documents.id],
+    }),
+  })
+);
+
+export const patientDailyDashboardsRelations = relations(
+  patientDailyDashboards,
+  ({ one }) => ({
+    patient: one(users, {
+      fields: [patientDailyDashboards.patientUserId],
+      references: [users.id],
+    }),
+  })
+);
+
 export const chatThreadsRelations = relations(chatThreads, ({ one, many }) => ({
-  patient: one(users, { fields: [chatThreads.patientUserId], references: [users.id] }),
-  createdBy: one(users, { fields: [chatThreads.createdByUserId], references: [users.id] }),
+  patient: one(users, {
+    fields: [chatThreads.patientUserId],
+    references: [users.id],
+  }),
+  createdBy: one(users, {
+    fields: [chatThreads.createdByUserId],
+    references: [users.id],
+  }),
   messages: many(chatMessages),
 }));
 
 export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
-  thread: one(chatThreads, { fields: [chatMessages.threadId], references: [chatThreads.id] }),
+  thread: one(chatThreads, {
+    fields: [chatMessages.threadId],
+    references: [chatThreads.id],
+  }),
 }));
 
 export const userMemoriesRelations = relations(userMemories, ({ one }) => ({
-  owner: one(users, { fields: [userMemories.ownerUserId], references: [users.id] }),
-  thread: one(chatThreads, { fields: [userMemories.sourceThreadId], references: [chatThreads.id] }),
+  owner: one(users, {
+    fields: [userMemories.ownerUserId],
+    references: [users.id],
+  }),
+  thread: one(chatThreads, {
+    fields: [userMemories.sourceThreadId],
+    references: [chatThreads.id],
+  }),
   message: one(chatMessages, {
     fields: [userMemories.sourceMessageId],
     references: [chatMessages.id],
@@ -607,4 +723,5 @@ export type PatientDailyDashboard = typeof patientDailyDashboards.$inferSelect;
 export type ChatThread = typeof chatThreads.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type UserMemory = typeof userMemories.$inferSelect;
-export type PatientRecordSuggestion = typeof patientRecordSuggestions.$inferSelect;
+export type PatientRecordSuggestion =
+  typeof patientRecordSuggestions.$inferSelect;

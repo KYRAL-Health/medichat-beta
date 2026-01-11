@@ -39,15 +39,37 @@ function ThemeIcon({ theme }: { theme: Theme }) {
   if (theme === "dark") {
     // Sun icon (switch to light)
     return (
-      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg
+        viewBox="0 0 24 24"
+        className="h-4 w-4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2" />
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 19v2" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4.22 4.22l1.42 1.42" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M18.36 18.36l1.42 1.42" />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M4.22 4.22l1.42 1.42"
+        />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M18.36 18.36l1.42 1.42"
+        />
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 12h2" />
         <path strokeLinecap="round" strokeLinejoin="round" d="M19 12h2" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4.22 19.78l1.42-1.42" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M18.36 5.64l1.42-1.42" />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M4.22 19.78l1.42-1.42"
+        />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M18.36 5.64l1.42-1.42"
+        />
         <circle cx="12" cy="12" r="4" />
       </svg>
     );
@@ -55,7 +77,13 @@ function ThemeIcon({ theme }: { theme: Theme }) {
 
   // Moon icon (switch to dark)
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      viewBox="0 0 24 24"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -75,8 +103,10 @@ function NavLink({
   icon?: ReactNode;
 }) {
   const pathname = usePathname();
-  const active = pathname === href || (href !== "/patient/dashboard" && pathname.startsWith(`${href}/`));
-  
+  const active =
+    pathname === href ||
+    (href !== "/patient/dashboard" && pathname.startsWith(`${href}/`));
+
   return (
     <Link
       href={href}
@@ -136,35 +166,65 @@ export function AppShell({
 
   // Patient Navigation Items
   const patientLinks = [
-    { 
-        href: "/patient/dashboard", 
-        label: "AI Home",
-        icon: (
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-            </svg>
-        ) 
+    {
+      href: "/patient/dashboard",
+      label: "AI Home",
+      icon: (
+        <svg
+          viewBox="0 0 24 24"
+          className="h-4 w-4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+          />
+        </svg>
+      ),
     },
-    { 
-        href: "/patient/documents", 
-        label: "Documents",
-        icon: (
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-            </svg>
-        )
+    {
+      href: "/patient/documents",
+      label: "Documents",
+      icon: (
+        <svg
+          viewBox="0 0 24 24"
+          className="h-4 w-4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+          />
+        </svg>
+      ),
     },
-    { 
-        href: "/patient/data", 
-        label: "My Data",
-        icon: (
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-        )
+    {
+      href: "/patient/data",
+      label: "My Data",
+      icon: (
+        <svg
+          viewBox="0 0 24 24"
+          className="h-4 w-4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+          />
+        </svg>
+      ),
     },
-    // { 
-    //     href: "/patient/map", 
+    // {
+    //     href: "/patient/map",
     //     label: "Health Map",
     //     icon: (
     //         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
@@ -172,39 +232,69 @@ export function AppShell({
     //         </svg>
     //     )
     // },
-    { 
-        href: "/patient/sharing", 
-        label: "Sharing",
-        icon: (
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-            </svg>
-        )
+    {
+      href: "/patient/sharing",
+      label: "Sharing",
+      icon: (
+        <svg
+          viewBox="0 0 24 24"
+          className="h-4 w-4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+          />
+        </svg>
+      ),
     },
   ];
 
   // Physician Navigation Items
   const physicianLinks = [
-    { 
-        href: "/physician/patients", 
-        label: "Patients",
-        icon: (
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-        )
+    {
+      href: "/physician/patients",
+      label: "Patients",
+      icon: (
+        <svg
+          viewBox="0 0 24 24"
+          className="h-4 w-4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+          />
+        </svg>
+      ),
     },
-    { 
-        href: "/physician/invites", 
-        label: "Invites",
-        icon: (
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-        )
+    {
+      href: "/physician/invites",
+      label: "Invites",
+      icon: (
+        <svg
+          viewBox="0 0 24 24"
+          className="h-4 w-4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+          />
+        </svg>
+      ),
     },
-    // { 
-    //     href: "/physician/map", 
+    // {
+    //     href: "/physician/map",
     //     label: "Health Map",
     //     icon: (...)
     // },
@@ -225,41 +315,61 @@ export function AppShell({
             {mode}
           </span>
         </div>
-        
+
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {currentLinks.map((link) => (
             <NavLink key={link.href} {...link} />
           ))}
         </nav>
 
-        <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
-           <div className="flex items-center gap-2 justify-between">
-             <button
-                onClick={toggleTheme}
-                className="p-2 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-600 dark:text-zinc-400"
-                title="Toggle Theme"
-             >
-               <ThemeIcon theme={theme} />
-             </button>
-             
-             <button
-                onClick={() => handleModeChange(mode === "patient" ? "physician" : "patient")}
-                className="text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 px-2"
-                title={`Switch to ${mode === "patient" ? "Physician" : "Patient"} View`}
-             >
-               {mode === "patient" ? "Physician" : "Patient"}
-             </button>
+        <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
+          <div className="flex items-center gap-2 justify-between">
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-600 dark:text-zinc-400"
+              title="Toggle Theme"
+            >
+              <ThemeIcon theme={theme} />
+            </button>
 
-             <button
-                onClick={handleLogout}
-                className="text-xs text-red-600 dark:text-red-400 hover:underline px-2"
-             >
-               Log out
-             </button>
-           </div>
-           <div className="text-xs text-zinc-400 dark:text-zinc-600 pt-2 text-center">
-             Not medical advice.
-           </div>
+            <button
+              onClick={() =>
+                handleModeChange(mode === "patient" ? "physician" : "patient")
+              }
+              className="text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 px-2"
+              title={`Switch to ${
+                mode === "patient" ? "Physician" : "Patient"
+              } View`}
+            >
+              {mode === "patient" ? "Physician" : "Patient"}
+            </button>
+
+            <button
+              onClick={handleLogout}
+              className="text-xs text-red-600 dark:text-red-400 hover:underline px-2"
+            >
+              Log out
+            </button>
+          </div>
+
+          <div className="space-y-2 text-center">
+            <div className="text-[10px] text-zinc-400 dark:text-zinc-600">
+              <span className="font-semibold text-red-500">
+                Call 911 for emergencies.
+              </span>
+              <br />
+              MediChat is an AI assistant, not a doctor.
+            </div>
+            <div className="flex justify-center gap-2 text-[10px] text-zinc-400 dark:text-zinc-600">
+              <Link href="/terms" className="hover:underline">
+                Terms
+              </Link>
+              <span>·</span>
+              <Link href="/privacy" className="hover:underline">
+                Privacy
+              </Link>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -267,67 +377,113 @@ export function AppShell({
       <div className="flex-1 md:ml-64 flex flex-col min-h-screen">
         {/* Mobile Header */}
         <header className="md:hidden flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 sticky top-0 z-10">
-           <div className="flex items-center gap-2">
-             <Link href="/" className="font-semibold">MediChat</Link>
-             <span className="px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] font-medium text-zinc-500 uppercase">
-                {mode}
-             </span>
-           </div>
-           <button 
-             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-             className="p-2 rounded-md border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900"
-           >
-             <span className="sr-only">Open menu</span>
-             <svg viewBox="0 0 24 24" className="h-5 w-5" stroke="currentColor" fill="none" strokeWidth="2">
-               <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-             </svg>
-           </button>
+          <div className="flex items-center gap-2">
+            <Link href="/" className="font-semibold">
+              MediChat
+            </Link>
+            <span className="px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] font-medium text-zinc-500 uppercase">
+              {mode}
+            </span>
+          </div>
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-2 rounded-md border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+          >
+            <span className="sr-only">Open menu</span>
+            <svg
+              viewBox="0 0 24 24"
+              className="h-5 w-5"
+              stroke="currentColor"
+              fill="none"
+              strokeWidth="2"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4 6h16M4 12h16M4 18h16"
+              />
+            </svg>
+          </button>
         </header>
 
         {/* Mobile Drawer */}
         {mobileMenuOpen && (
-          <div className="fixed inset-0 z-50 md:hidden bg-white dark:bg-zinc-950">
-             <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800">
-               <span className="font-semibold">Menu</span>
-               <button 
-                 onClick={() => setMobileMenuOpen(false)}
-                 className="p-2 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-900"
-               >
-                 <svg viewBox="0 0 24 24" className="h-5 w-5" stroke="currentColor" fill="none" strokeWidth="2">
-                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                 </svg>
-               </button>
-             </div>
-             <nav className="p-4 space-y-2">
-                {currentLinks.map((link) => (
-                  <div key={link.href} onClick={() => setMobileMenuOpen(false)}>
-                    <NavLink {...link} />
-                  </div>
-                ))}
-                <div className="pt-4 mt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
-                   <div className="flex items-center justify-between px-2">
-                      <span className="text-sm font-medium">Theme</span>
-                      <button onClick={toggleTheme} className="p-2 border rounded-md">
-                        <ThemeIcon theme={theme} />
-                      </button>
-                   </div>
-                   <div className="flex items-center justify-between px-2">
-                      <span className="text-sm font-medium">Switch Mode</span>
-                      <button 
-                        onClick={() => handleModeChange(mode === "patient" ? "physician" : "patient")}
-                        className="px-3 py-1.5 text-xs border rounded-md"
-                      >
-                        To {mode === "patient" ? "Physician" : "Patient"}
-                      </button>
-                   </div>
-                   <button 
-                     onClick={handleLogout}
-                     className="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-md"
-                   >
-                     Log out
-                   </button>
+          <div className="fixed inset-0 z-50 md:hidden bg-white dark:bg-zinc-950 flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800">
+              <span className="font-semibold">Menu</span>
+              <button
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-900"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5"
+                  stroke="currentColor"
+                  fill="none"
+                  strokeWidth="2"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+              {currentLinks.map((link) => (
+                <div key={link.href} onClick={() => setMobileMenuOpen(false)}>
+                  <NavLink {...link} />
                 </div>
-             </nav>
+              ))}
+            </nav>
+
+            <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 space-y-4">
+              <div className="flex items-center justify-between px-2">
+                <span className="text-sm font-medium">Theme</span>
+                <button onClick={toggleTheme} className="p-2 border rounded-md">
+                  <ThemeIcon theme={theme} />
+                </button>
+              </div>
+              <div className="flex items-center justify-between px-2">
+                <span className="text-sm font-medium">Switch Mode</span>
+                <button
+                  onClick={() =>
+                    handleModeChange(
+                      mode === "patient" ? "physician" : "patient"
+                    )
+                  }
+                  className="px-3 py-1.5 text-xs border rounded-md"
+                >
+                  To {mode === "patient" ? "Physician" : "Patient"}
+                </button>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-md"
+              >
+                Log out
+              </button>
+
+              <div className="space-y-2 text-center pt-2 border-t border-zinc-100 dark:border-zinc-900">
+                <div className="text-[10px] text-zinc-400 dark:text-zinc-600">
+                  <span className="font-semibold text-red-500">
+                    Call 911 for emergencies.
+                  </span>
+                  <br />
+                  Not medical advice.
+                </div>
+                <div className="flex justify-center gap-2 text-[10px] text-zinc-400 dark:text-zinc-600">
+                  <Link href="/terms" className="hover:underline">
+                    Terms
+                  </Link>
+                  <span>·</span>
+                  <Link href="/privacy" className="hover:underline">
+                    Privacy
+                  </Link>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
