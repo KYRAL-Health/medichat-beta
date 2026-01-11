@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import {
-  alcoholConsumptionEnum,
-  genderEnum,
   patientProfiles,
-  physicalActivityEnum,
+  patientProfileHistory,
   smokingStatusEnum,
+  alcoholConsumptionEnum,
+  physicalActivityEnum,
+  genderEnum,
 } from "@/server/db/schema";
 
 export const runtime = "nodejs";
@@ -58,22 +59,58 @@ export async function PUT(req: NextRequest) {
 
     const values = parsed.data;
 
-    const saved = await db
-      .insert(patientProfiles)
-      .values({
+    // Transaction: 
+    // 1. Close current history record (if any)
+    // 2. Insert new history record
+    // 3. Update main profile
+    
+    await db.transaction(async (tx) => {
+      // 1. Find the latest valid history record to close it
+      const latestHistory = await tx.query.patientProfileHistory.findFirst({
+        where: eq(patientProfileHistory.patientUserId, user.id),
+        orderBy: [desc(patientProfileHistory.validFrom)],
+      });
+
+      if (latestHistory && !latestHistory.validTo) {
+        await tx
+          .update(patientProfileHistory)
+          .set({ validTo: new Date() })
+          .where(eq(patientProfileHistory.id, latestHistory.id));
+      }
+
+      // 2. Insert new history record
+      await tx.insert(patientProfileHistory).values({
         patientUserId: user.id,
         ...values,
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [patientProfiles.patientUserId],
-        set: {
+        // Defaults for required enums if not provided (though form usually provides them)
+        gender: values.gender ?? "unknown",
+        smokingStatus: values.smokingStatus ?? "unknown",
+        alcoholConsumption: values.alcoholConsumption ?? "unknown",
+        physicalActivityLevel: values.physicalActivityLevel ?? "unknown",
+        validFrom: new Date(),
+      });
+
+      // 3. Update/Upsert main profile (current state)
+      await tx
+        .insert(patientProfiles)
+        .values({
+          patientUserId: user.id,
           ...values,
           updatedAt: new Date(),
-        },
-      })
-      .returning()
-      .then((rows) => rows[0]);
+        })
+        .onConflictDoUpdate({
+          target: [patientProfiles.patientUserId],
+          set: {
+            ...values,
+            updatedAt: new Date(),
+          },
+        });
+    });
+
+    // Return the updated profile
+    const saved = await db.query.patientProfiles.findFirst({
+      where: eq(patientProfiles.patientUserId, user.id),
+    });
 
     return NextResponse.json({ ok: true, profile: saved });
   } catch (error) {
@@ -90,5 +127,3 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-
-

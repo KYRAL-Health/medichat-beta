@@ -120,6 +120,46 @@ export const patientProfiles = pgTable(
   })
 );
 
+export const patientProfileHistory = pgTable(
+  "patient_profile_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    patientUserId: uuid("patient_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    
+    // Demographics
+    dateOfBirth: date("date_of_birth"),
+    ageYears: integer("age_years"),
+    gender: genderEnum("gender").default("unknown").notNull(),
+
+    // HPI / symptoms
+    historyOfPresentIllness: text("history_of_present_illness"),
+    symptomOnset: text("symptom_onset"),
+    symptomDuration: text("symptom_duration"),
+
+    // Lifestyle
+    smokingStatus: smokingStatusEnum("smoking_status").default("unknown").notNull(),
+    alcoholConsumption: alcoholConsumptionEnum("alcohol_consumption")
+      .default("unknown")
+      .notNull(),
+    physicalActivityLevel: physicalActivityEnum("physical_activity_level")
+      .default("unknown")
+      .notNull(),
+
+    validFrom: timestamp("valid_from").defaultNow().notNull(),
+    validTo: timestamp("valid_to"), // Null means current
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    patientIdx: index("patient_profile_history_patient_idx").on(table.patientUserId),
+    validFromIdx: index("patient_profile_history_valid_from_idx").on(
+      table.patientUserId,
+      table.validFrom
+    ),
+  })
+);
+
 export const patientConditions = pgTable(
   "patient_conditions",
   {
@@ -547,9 +587,20 @@ export const userProfilesRelations = relations(userProfiles, ({ one }) => ({
 
 export const patientProfilesRelations = relations(
   patientProfiles,
-  ({ one }) => ({
+  ({ one, many }) => ({
     user: one(users, {
       fields: [patientProfiles.patientUserId],
+      references: [users.id],
+    }),
+    history: many(patientProfileHistory),
+  })
+);
+
+export const patientProfileHistoryRelations = relations(
+  patientProfileHistory,
+  ({ one }) => ({
+    patient: one(users, {
+      fields: [patientProfileHistory.patientUserId],
       references: [users.id],
     }),
   })
