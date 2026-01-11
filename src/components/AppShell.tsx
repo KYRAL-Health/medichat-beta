@@ -474,13 +474,13 @@ export function AppShell({
                   Not medical advice.
                 </div>
                 <div className="flex justify-center gap-2 text-[10px] text-zinc-400 dark:text-zinc-600">
-                  <Link href="/terms" className="hover:underline">
+                  <a href="https://app.termly.io/policy-viewer/policy.html?policyUUID=bc5875fc-68c7-4979-a056-6290204cca3a" target="_blank" rel="noopener noreferrer" className="hover:underline">
                     Terms
-                  </Link>
+                  </a>
                   <span>·</span>
-                  <Link href="/privacy" className="hover:underline">
+                  <a href="https://app.termly.io/policy-viewer/policy.html?policyUUID=95aefd01-158c-49ea-ad35-12a3b679fe79" target="_blank" rel="noopener noreferrer" className="hover:underline">
                     Privacy
-                  </Link>
+                  </a>
                 </div>
               </div>
             </div>

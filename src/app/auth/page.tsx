@@ -156,9 +156,9 @@ export default function AuthPage() {
         <div className="text-center space-y-2">
           <p className="text-xs text-zinc-500 dark:text-zinc-500">
             By signing in, you accept our{" "}
-            <a href="/terms" className="underline hover:text-zinc-900 dark:hover:text-zinc-300">Terms of Service</a>
+            <a href="https://app.termly.io/policy-viewer/policy.html?policyUUID=bc5875fc-68c7-4979-a056-6290204cca3a" target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-900 dark:hover:text-zinc-300">Terms of Service</a>
             {" "}and{" "}
-            <a href="/privacy" className="underline hover:text-zinc-900 dark:hover:text-zinc-300">Privacy Policy</a>.
+            <a href="https://app.termly.io/policy-viewer/policy.html?policyUUID=95aefd01-158c-49ea-ad35-12a3b679fe79" target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-900 dark:hover:text-zinc-300">Privacy Policy</a>.
           </p>
           <p className="text-xs text-zinc-500 dark:text-zinc-500">
             Connect with Reown to create a session. Email login is supported.
