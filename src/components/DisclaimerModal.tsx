@@ -19,7 +19,9 @@ export function DisclaimerModal({
       <div className="w-full max-w-2xl bg-white dark:bg-zinc-950 rounded-xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
           <div className="space-y-2">
-            <h2 className="text-xl font-bold">Important Privacy & Safety Notice</h2>
+            <h2 className="text-xl font-bold">
+              Important Privacy & Safety Notice
+            </h2>
             <div className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-3 text-sm">
               <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
                 Key Privacy Commitments:
@@ -39,10 +41,7 @@ export function DisclaimerModal({
                   This service is for informational purposes only and is not a
                   substitute for professional medical advice.
                 </li>
-                <li>
-                  In case of emergency, call 911 immediately. Do not use this
-                  app.
-                </li>
+                <li>In case of emergency, call 911 immediately.</li>
               </ul>
             </div>
           </div>
@@ -73,7 +72,9 @@ export function DisclaimerModal({
             {expanded && (
               <div className="text-xs text-zinc-500 dark:text-zinc-400 space-y-4 border-t border-zinc-100 dark:border-zinc-900 pt-4">
                 <p>
-                  <strong>KYRAL MEDICHAT MEDICAL AI CHATBOT DISCLAIMER AND CONSENT</strong>
+                  <strong>
+                    KYRAL MEDICHAT MEDICAL AI CHATBOT DISCLAIMER AND CONSENT
+                  </strong>
                   <br />
                   By accessing and using this AI-powered health chatbot (the
                   "Service"), you acknowledge and agree to the following:
@@ -88,7 +89,9 @@ export function DisclaimerModal({
                 </p>
 
                 <p>
-                  <strong>NOT A SUBSTITUTE FOR PROFESSIONAL MEDICAL CARE</strong>
+                  <strong>
+                    NOT A SUBSTITUTE FOR PROFESSIONAL MEDICAL CARE
+                  </strong>
                   <br />
                   This Service provides general health information only and is
                   NOT a substitute for professional medical advice, diagnosis,
@@ -118,11 +121,12 @@ export function DisclaimerModal({
                   By using this Service, you consent to our collection, storage,
                   and processing of health-related information and personally
                   identifying information you provide. This information is used
-                  solely to provide the Service to you. We do <strong>NOT</strong> use your
-                  health data to train our AI models. We do <strong>NOT</strong> sell your personal
-                  data to third parties. Your data may be stored on servers in
-                  various locations and may be subject to different state and
-                  federal privacy laws in the United States.
+                  solely to provide the Service to you. We do{" "}
+                  <strong>NOT</strong> use your health data to train our AI
+                  models. We do <strong>NOT</strong> sell your personal data to
+                  third parties. Your data may be stored on servers in various
+                  locations and may be subject to different state and federal
+                  privacy laws in the United States.
                 </p>
 
                 <p>
@@ -138,8 +142,8 @@ export function DisclaimerModal({
                   <br />
                   While we strive for accuracy, AI-generated responses may
                   contain errors, omissions, or outdated information. We make no
-                  warranties regarding the accuracy, completeness, or reliability
-                  of information provided.
+                  warranties regarding the accuracy, completeness, or
+                  reliability of information provided.
                 </p>
 
                 <p>
@@ -188,4 +192,3 @@ export function DisclaimerModal({
     </div>
   );
 }
-
