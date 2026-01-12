@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 
-import { getAuthenticatedUser } from "@/server/auth/session";
+import { auth } from "@clerk/nextjs/server";
 
 export default async function Home() {
-  const user = await getAuthenticatedUser();
-  if (!user) {
+  const { isAuthenticated } = await auth();
+  if (!isAuthenticated) {
     redirect("/auth");
   }
 

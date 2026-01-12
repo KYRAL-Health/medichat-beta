@@ -1,7 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 
 import { HealthMapClient } from "@/components/HealthMapClient";
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
 import { db } from "@/server/db";
 import {
@@ -22,8 +22,8 @@ export default async function PhysicianPatientMapPage({
 }) {
   const { patientUserId } = await params;
 
-  const physician = await requireAuthenticatedUser();
-  await assertPatientAccess({ viewerUserId: physician.id, patientUserId });
+  const physicianId = (await requireAuthenticatedUser()).userId;
+  await assertPatientAccess({ viewerUserId: physicianId, patientUserId });
 
   const docs = await db.query.documents.findMany({
     where: eq(documents.patientUserId, patientUserId),
@@ -57,7 +57,7 @@ export default async function PhysicianPatientMapPage({
 
   const memories = await db.query.userMemories.findMany({
     where: and(
-      eq(userMemories.ownerUserId, physician.id),
+      eq(userMemories.ownerUserId, physicianId),
       eq(userMemories.status, "accepted"),
       eq(userMemories.contextMode, "physician"),
       eq(userMemories.subjectPatientUserId, patientUserId)

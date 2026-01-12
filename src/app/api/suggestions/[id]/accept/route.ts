@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { db } from "@/server/db";
 import {
   patientConditions,
@@ -20,13 +20,13 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
 
     // Fetch suggestion
     const suggestion = await db.query.patientRecordSuggestions.findFirst({
       where: and(
         eq(patientRecordSuggestions.id, id),
-        eq(patientRecordSuggestions.patientUserId, user.id),
+        eq(patientRecordSuggestions.patientUserId, userId),
         eq(patientRecordSuggestions.status, "proposed")
       ),
     });
@@ -41,10 +41,10 @@ export async function POST(
     await db.transaction(async (tx) => {
       // 1. Apply update based on kind
       if (suggestion.kind === "profile_update") {
-        await tx
+            await tx
           .insert(patientProfiles)
           .values({
-            patientUserId: user.id,
+            patientUserId: userId,
             ...payload,
             updatedAt: now,
           })
@@ -57,7 +57,7 @@ export async function POST(
           });
       } else if (suggestion.kind === "vital") {
         await tx.insert(patientVitals).values({
-          patientUserId: user.id,
+          patientUserId: userId,
           measuredAt: payload.measuredAt ? new Date(payload.measuredAt) : now,
           systolic: payload.systolic ?? null,
           diastolic: payload.diastolic ?? null,
@@ -67,7 +67,7 @@ export async function POST(
         });
       } else if (suggestion.kind === "lab") {
         await tx.insert(patientLabResults).values({
-          patientUserId: user.id,
+          patientUserId: userId,
           collectedAt: payload.collectedAt ? new Date(payload.collectedAt) : now,
           testName: payload.testName,
           valueText: payload.valueText,
@@ -79,7 +79,7 @@ export async function POST(
         });
       } else if (suggestion.kind === "medication") {
         await tx.insert(patientMedications).values({
-          patientUserId: user.id,
+          patientUserId: userId,
           medicationName: payload.medicationName,
           dose: payload.dose ?? null,
           frequency: payload.frequency ?? null,
@@ -89,7 +89,7 @@ export async function POST(
         });
       } else if (suggestion.kind === "condition") {
         await tx.insert(patientConditions).values({
-          patientUserId: user.id,
+          patientUserId: userId,
           conditionName: payload.conditionName,
           status: payload.status ?? null,
           notedAt: now,

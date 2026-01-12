@@ -1,7 +1,6 @@
-import Link from "next/link";
-import { and, desc, eq, gte, isNull } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
 import { db } from "@/server/db";
 import {
@@ -12,7 +11,6 @@ import {
   patientDailyDashboards,
   patientLabResults,
   patientMedications,
-  patientProfiles,
   patientRecordSuggestions,
   patientVitals,
   userMemories,
@@ -34,8 +32,7 @@ export default async function PhysicianPatientDetailPage({
 
   let physicianUserId: string;
   try {
-    const physician = await requireAuthenticatedUser();
-    physicianUserId = physician.id;
+    physicianUserId = (await requireAuthenticatedUser()).userId;
   } catch (e) {
     return <div>Error loading user</div>;
   }

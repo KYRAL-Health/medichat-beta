@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAppKit, useAppKitAccount } from "@reown/appkit/react";
+import { SignInButton, SignUpButton } from "@clerk/nextjs";
 
-import { LoadingDots } from "@/components/LoadingDots";
-import { useWalletAuth } from "@/hooks/useWalletAuth";
 import { DisclaimerModal } from "@/components/DisclaimerModal";
 
 type Theme = "light" | "dark";
@@ -53,19 +51,9 @@ function ThemeIcon({ theme }: { theme: Theme }) {
 }
 
 export default function AuthPage() {
-  const router = useRouter();
-  const walletAuth = useWalletAuth();
-  const { open } = useAppKit();
-  const { isConnected } = useAppKitAccount();
   const [theme, setTheme] = useState<Theme>("light");
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
-
-  useEffect(() => {
-    if (walletAuth.status === "authenticated") {
-      router.replace("/");
-    }
-  }, [walletAuth.status, router]);
 
   useEffect(() => {
     setTheme(document.documentElement.classList.contains("dark") ? "dark" : "light");
@@ -83,22 +71,6 @@ export default function AuthPage() {
     setDisclaimerAccepted(true);
     setShowDisclaimer(false);
     localStorage.setItem("medichat_disclaimer_accepted", "true");
-  };
-
-  const isLoading =
-    walletAuth.status === "checking" || walletAuth.status === "authenticating";
-
-  const handleSignIn = () => {
-    if (!disclaimerAccepted) {
-      setShowDisclaimer(true);
-      return;
-    }
-
-    if (!isConnected) {
-      open();
-    } else if (walletAuth.status === "unauthenticated") {
-      walletAuth.authenticate();
-    }
   };
 
   return (
@@ -127,31 +99,17 @@ export default function AuthPage() {
       <div className="w-full max-w-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-8 rounded-lg space-y-5 transition-colors duration-200">
         <div className="space-y-1">
           <h1 className="text-xl font-semibold">Sign in</h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Use Reown email login to continue.
-          </p>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">Sign in or create an account to continue.</p>
         </div>
 
-        {walletAuth.error && (
-          <div className="rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-200">
-            {walletAuth.error}
-          </div>
-        )}
-
-        <button
-          onClick={handleSignIn}
-          className="w-full px-4 py-2 rounded bg-black text-white dark:bg-white dark:text-black text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <span className="inline-flex items-center justify-center gap-2">
-              <span>Signing in</span>
-              <LoadingDots />
-            </span>
-          ) : (
-            "Sign in with email"
-          )}
-        </button>
+        <div className="flex gap-2">
+          <SignInButton mode="modal">
+            <button className="w-full px-4 py-2 rounded bg-black text-white text-sm font-medium">Sign in</button>
+          </SignInButton>
+          <SignUpButton mode="modal">
+            <button className="w-full px-4 py-2 rounded border text-sm">Sign up</button>
+          </SignUpButton>
+        </div>
 
         <div className="text-center space-y-2">
           <p className="text-xs text-zinc-500 dark:text-zinc-500">
@@ -159,9 +117,6 @@ export default function AuthPage() {
             <a href="https://app.termly.io/policy-viewer/policy.html?policyUUID=bc5875fc-68c7-4979-a056-6290204cca3a" target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-900 dark:hover:text-zinc-300">Terms of Service</a>
             {" "}and{" "}
             <a href="https://app.termly.io/policy-viewer/policy.html?policyUUID=95aefd01-158c-49ea-ad35-12a3b679fe79" target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-900 dark:hover:text-zinc-300">Privacy Policy</a>.
-          </p>
-          <p className="text-xs text-zinc-500 dark:text-zinc-500">
-            Connect with Reown to create a session. Email login is supported.
           </p>
         </div>
       </div>

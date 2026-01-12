@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { desc, eq, and } from "drizzle-orm";
 import { z } from "zod";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
 import { db } from "@/server/db";
 import { chatThreads } from "@/server/db/schema";
@@ -16,13 +16,13 @@ const CreateThreadSchema = z.object({
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
     const url = new URL(req.url);
-    const patientUserId = url.searchParams.get("patientUserId") ?? user.id;
+    const patientUserId = url.searchParams.get("patientUserId") ?? userId;
     const mode = (url.searchParams.get("mode") as "patient" | "physician") ?? "patient";
 
-    if (mode === "physician" || patientUserId !== user.id) {
-        await assertPatientAccess({ viewerUserId: user.id, patientUserId });
+    if (mode === "physician" || patientUserId !== userId) {
+        await assertPatientAccess({ viewerUserId: userId, patientUserId });
     }
 
     const threads = await db.query.chatThreads.findMany({
@@ -55,28 +55,28 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
     const parsed = CreateThreadSchema.safeParse(await req.json());
     if (!parsed.success) {
         return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
 
     const mode = (new URL(req.url).searchParams.get("mode") as "patient" | "physician") ?? "patient";
-    const patientUserId = mode === 'patient' ? user.id : (parsed.data.patientUserId ?? null);
+    const patientUserId = mode === 'patient' ? userId : (parsed.data.patientUserId ?? null);
 
     if (!patientUserId) {
         return NextResponse.json({ error: "Missing patientUserId" }, { status: 400 });
     }
 
-    if (mode === "physician" || patientUserId !== user.id) {
-        await assertPatientAccess({ viewerUserId: user.id, patientUserId });
+    if (mode === "physician" || patientUserId !== userId) {
+        await assertPatientAccess({ viewerUserId: userId, patientUserId });
     }
 
     const thread = await db
       .insert(chatThreads)
       .values({
         patientUserId,
-        createdByUserId: user.id,
+        createdByUserId: userId,
         contextMode: mode,
         title: parsed.data.title ?? "New Chat",
         updatedAt: new Date(),

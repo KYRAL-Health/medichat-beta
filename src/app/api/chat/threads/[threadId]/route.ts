@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { desc, eq, or } from "drizzle-orm";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
 import { db } from "@/server/db";
 import { chatMessages, chatThreads } from "@/server/db/schema";
@@ -14,7 +14,7 @@ export async function GET(
 ) {
   try {
     const { threadId } = await params;
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
 
     const thread = await db.query.chatThreads.findFirst({
         where: eq(chatThreads.id, threadId)
@@ -28,8 +28,8 @@ export async function GET(
     // If physician mode, check patient access.
     // If patient mode, only they can see their threads (or authorized physician).
     // Basically, if the user isn't the patient, check access.
-    if (thread.patientUserId !== user.id) {
-         await assertPatientAccess({ viewerUserId: user.id, patientUserId: thread.patientUserId });
+    if (thread.patientUserId !== userId) {
+         await assertPatientAccess({ viewerUserId: userId, patientUserId: thread.patientUserId });
     }
 
     const msgs = await db.query.chatMessages.findMany({
@@ -72,7 +72,7 @@ export async function DELETE(
 ) {
   try {
     const { threadId } = await params;
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
 
     const thread = await db.query.chatThreads.findFirst({
         where: eq(chatThreads.id, threadId)
@@ -84,8 +84,8 @@ export async function DELETE(
 
     // Authorization:
     // User must be the creator of the thread OR the patient whose data it is.
-    const isCreator = thread.createdByUserId === user.id;
-    const isPatient = thread.patientUserId === user.id;
+    const isCreator = thread.createdByUserId === userId;
+    const isPatient = thread.patientUserId === userId;
 
     if (!isCreator && !isPatient) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });

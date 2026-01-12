@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { db } from "@/server/db";
 import {
   patientProfiles,
@@ -28,9 +28,9 @@ const ProfileSchema = z.object({
 
 export async function GET() {
   try {
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
     const profile = await db.query.patientProfiles.findFirst({
-      where: eq(patientProfiles.patientUserId, user.id),
+      where: eq(patientProfiles.patientUserId, userId),
     });
     return NextResponse.json({ profile: profile ?? null });
   } catch (error) {
@@ -50,7 +50,7 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   try {
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
 
     const parsed = ProfileSchema.safeParse(await req.json());
     if (!parsed.success) {
@@ -67,7 +67,7 @@ export async function PUT(req: NextRequest) {
     await db.transaction(async (tx) => {
       // 1. Find the latest valid history record to close it
       const latestHistory = await tx.query.patientProfileHistory.findFirst({
-        where: eq(patientProfileHistory.patientUserId, user.id),
+        where: eq(patientProfileHistory.patientUserId, userId),
         orderBy: [desc(patientProfileHistory.validFrom)],
       });
 
@@ -80,7 +80,7 @@ export async function PUT(req: NextRequest) {
 
       // 2. Insert new history record
       await tx.insert(patientProfileHistory).values({
-        patientUserId: user.id,
+        patientUserId: userId,
         ...values,
         // Defaults for required enums if not provided (though form usually provides them)
         gender: values.gender ?? "unknown",
@@ -94,7 +94,7 @@ export async function PUT(req: NextRequest) {
       await tx
         .insert(patientProfiles)
         .values({
-          patientUserId: user.id,
+          patientUserId: userId,
           ...values,
           updatedAt: new Date(),
         })
@@ -109,7 +109,7 @@ export async function PUT(req: NextRequest) {
 
     // Return the updated profile
     const saved = await db.query.patientProfiles.findFirst({
-      where: eq(patientProfiles.patientUserId, user.id),
+      where: eq(patientProfiles.patientUserId, userId),
     });
 
     return NextResponse.json({ ok: true, profile: saved });

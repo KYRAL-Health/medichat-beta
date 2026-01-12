@@ -1,6 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
 import { db } from "@/server/db";
 import { chatMessages, chatThreads, userMemories } from "@/server/db/schema";
@@ -15,8 +15,7 @@ export default async function PhysicianChatPage({
 
   let physicianUserId: string;
   try {
-    const physician = await requireAuthenticatedUser();
-    physicianUserId = physician.id;
+    physicianUserId = (await requireAuthenticatedUser()).userId;
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return (

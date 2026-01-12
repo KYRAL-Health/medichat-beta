@@ -2,18 +2,18 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/AppShell";
-import { getAuthenticatedUserWithDb } from "@/server/auth/session";
+import { auth } from "@clerk/nextjs/server";
 
 export default async function AuthedLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const user = await getAuthenticatedUserWithDb();
-  if (!user) {
+  const { isAuthenticated } = await auth();
+  if (!isAuthenticated) {
     redirect("/auth");
   }
-
+  
   const cookieStore = await cookies();
   const modeCookie = cookieStore.get("medichat_mode")?.value;
   const mode = modeCookie === "physician" ? "physician" : "patient";
@@ -21,7 +21,6 @@ export default async function AuthedLayout({
   return (
     <AppShell 
       mode={mode} 
-      disclaimerAccepted={!!user.disclaimerAcceptedAt}
     >
       {children}
     </AppShell>

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { db } from "@/server/db";
 import { userMemories } from "@/server/db/schema";
 
@@ -13,7 +13,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
 
     const updated = await db
       .update(userMemories)
@@ -21,7 +21,7 @@ export async function POST(
       .where(
         and(
           eq(userMemories.id, id),
-          eq(userMemories.ownerUserId, user.id),
+          eq(userMemories.ownerUserId, userId),
           eq(userMemories.status, "proposed")
         )
       )

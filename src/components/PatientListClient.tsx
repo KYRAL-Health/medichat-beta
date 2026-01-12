@@ -12,7 +12,7 @@ export function PatientListClient({
 }: {
   patients: Array<{
     patientUserId: string;
-    walletAddress: string;
+    patientClerkUserId: string;
     displayName: string | null;
     ageYears: number | null;
     gender: string | null;
@@ -113,7 +113,7 @@ export function PatientListClient({
                 </div>
               )}
               <div className="text-xs text-zinc-500 font-mono truncate mt-0.5">
-                {p.walletAddress}
+                {p.patientClerkUserId}
               </div>
             </div>
           </div>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { desc, eq } from "drizzle-orm";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
 import { db } from "@/server/db";
 import { documents } from "@/server/db/schema";
@@ -10,12 +10,12 @@ export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
     const url = new URL(req.url);
-    const patientUserId = url.searchParams.get("patientUserId") ?? user.id;
+    const patientUserId = url.searchParams.get("patientUserId") ?? userId;
 
-    if (patientUserId !== user.id) {
-      await assertPatientAccess({ viewerUserId: user.id, patientUserId });
+    if (patientUserId !== userId) {
+      await assertPatientAccess({ viewerUserId: userId, patientUserId });
     }
 
     const rows = await db.query.documents.findMany({

@@ -1,20 +1,22 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
-import { db } from "@/server/db";
-import { users } from "@/server/db/schema";
-import { getAuthenticatedUser, requireAuthenticatedUser } from "@/server/auth/session";
+import { clerkClient } from "@clerk/nextjs/server";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 
 export async function POST() {
   try {
-    const user = await requireAuthenticatedUser();
-    
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { userId, sessionClaims } = await requireAuthenticatedUser();
+    const client = await clerkClient();
+
+    if (sessionClaims.disclaimerAcceptedAt) {
+      return NextResponse.json({ message: "Disclaimer already accepted." }, { status: 400 });
     }
 
-    await db.update(users)
-      .set({ disclaimerAcceptedAt: new Date() })
-      .where(eq(users.id, user.id));
+    // Update the user's public metadata so the acceptance is attached to the user
+    await client.users.updateUserMetadata(userId, {
+      publicMetadata: {
+        disclaimerAcceptedAt: new Date().toISOString(),
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

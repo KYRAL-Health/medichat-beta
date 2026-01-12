@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { db } from "@/server/db";
 import { userProfiles } from "@/server/db/schema";
 import { PatientDataPageClient } from "@/components/PatientDataPageClient";
@@ -8,8 +8,7 @@ import { PatientDataPageClient } from "@/components/PatientDataPageClient";
 export default async function PatientDataPage() {
   let userId: string;
   try {
-    const user = await requireAuthenticatedUser();
-    userId = user.id;
+    userId = (await requireAuthenticatedUser()).userId;
   } catch (e) {
     return <div>Error loading user</div>;
   }

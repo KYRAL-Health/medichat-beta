@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { db } from "@/server/db";
 import { accessInvites } from "@/server/db/schema";
 import { createInviteToken } from "@/server/invites/tokens";
@@ -16,10 +16,10 @@ const CreateInviteSchema = z.object({
 
 export async function GET() {
   try {
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
 
     const rows = await db.query.accessInvites.findMany({
-      where: eq(accessInvites.inviterUserId, user.id),
+      where: eq(accessInvites.inviterUserId, userId),
       orderBy: [desc(accessInvites.createdAt)],
     });
 
@@ -51,7 +51,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
     const parsed = CreateInviteSchema.safeParse(await req.json());
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7); // 7 days
 
     const { invite } = await createAccessInvite({
-      inviterUserId: user.id,
+      inviterUserId: userId,
       kind: parsed.data.kind,
       token,
       expiresAt,

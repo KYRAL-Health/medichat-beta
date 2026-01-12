@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { revokePatientPhysicianAccess } from "@/server/invites/service";
 
 export const runtime = "nodejs";
 
 const RevokeAccessSchema = z.object({
-  physicianUserId: z.string().uuid(),
+  physicianUserId: z.string(),
 });
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
     const parsed = RevokeAccessSchema.safeParse(await req.json());
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
     // Patient revokes access to their data.
     await revokePatientPhysicianAccess({
-      patientUserId: user.id,
+      patientUserId: userId,
       physicianUserId: parsed.data.physicianUserId,
     });
 

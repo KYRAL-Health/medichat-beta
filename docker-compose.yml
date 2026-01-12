@@ -10,25 +10,38 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    env_file:
+      - .env.example
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/medichat
-      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - NODE_ENV=${NODE_ENV:-production}
+      - JWT_SECRET=${JWT_SECRET}
+      - SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN}
+      - SENTRY_DSN=${SENTRY_DSN}
+
       # AI Configuration
-      # - AI_API_BASE=https://openrouter.ai/api/v1"
-      # - AI_API_KEY=api-key
-      # - AI_MODEL_CHAT=openai/gpt-4o
-      # - AI_MODEL_EXTRACT=openai/gpt-4o-mini
-      # - AI_MODEL_DASHBOARD=openai/gpt-4o-mini
-      
+      - AI_API_BASE=${AI_API_BASE}
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_MODEL_CHAT=${AI_MODEL_CHAT}
+      - AI_MODEL_EXTRACT=${AI_MODEL_EXTRACT}
+      - AI_MODEL_DASHBOARD=${AI_MODEL_DASHBOARD}
+
       # Storage Configuration (S3)
-      # - REGION=us-east-1
-      # - SUPABASE_BUCKET_ENDPOINT=...
-      # - BUCKET_NAME=...
-      # - SUPABASE_BUCKET_ACCESS_KEY_ID=...
-      # - SUPABASE_BUCKET_SECRET=...
-      
-      # Auth
-      - JWT_SECRET=changeme_in_production
+      - REGION=${REGION}
+      - SUPABASE_BUCKET_ENDPOINT=${SUPABASE_BUCKET_ENDPOINT}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - SUPABASE_BUCKET_ACCESS_KEY_ID=${SUPABASE_BUCKET_ACCESS_KEY_ID}
+      - SUPABASE_BUCKET_SECRET=${SUPABASE_BUCKET_SECRET}
+
+      # Public / Clerk
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+      - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
+      - CLERK_WEBHOOK_SECRET=${CLERK_WEBHOOK_SECRET}
+      - NEXT_PUBLIC_CLERK_SIGN_IN_URL=${NEXT_PUBLIC_CLERK_SIGN_IN_URL}
+      - NEXT_PUBLIC_CLERK_SIGN_UP_URL=${NEXT_PUBLIC_CLERK_SIGN_UP_URL}
+      - NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=${NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL}
+      - NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=${NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL}
       
     depends_on:
       - db

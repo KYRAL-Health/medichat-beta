@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { db } from "@/server/db";
 import { accessInvites, users } from "@/server/db/schema";
 import { hashInviteToken } from "@/server/invites/tokens";
@@ -59,14 +59,14 @@ export default async function InvitePage({
       id: accessInvites.id,
       kind: accessInvites.kind,
       inviterUserId: accessInvites.inviterUserId,
-      inviterWalletAddress: users.walletAddress,
+      inviterClerkUserId: users.clerkUserId,
       expiresAt: accessInvites.expiresAt,
       revokedAt: accessInvites.revokedAt,
       acceptedAt: accessInvites.acceptedAt,
       createdAt: accessInvites.createdAt,
     })
     .from(accessInvites)
-    .innerJoin(users, eq(accessInvites.inviterUserId, users.id))
+    .innerJoin(users, eq(accessInvites.inviterUserId, users.clerkUserId))
     .where(eq(accessInvites.tokenHash, tokenHash))
     .then((rows) => rows[0] ?? null);
 
@@ -100,7 +100,7 @@ export default async function InvitePage({
       <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 space-y-2">
         <div className="text-sm">
           <span className="text-zinc-500 dark:text-zinc-400">Inviter:</span>{" "}
-          <span className="font-mono text-xs">{inviteRow.inviterWalletAddress}</span>
+          <span className="font-mono text-xs">{inviteRow.inviterClerkUserId}</span>
         </div>
         <div className="text-sm text-zinc-600 dark:text-zinc-400">
           {kindExplanation(inviteRow.kind)}

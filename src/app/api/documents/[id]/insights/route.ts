@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
 import { getDocumentInsightsData } from "@/server/documents/insights";
 
@@ -12,7 +12,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
 
     const data = await getDocumentInsightsData(id);
     if (!data) {
@@ -21,9 +21,9 @@ export async function GET(
 
     const { document: doc, extraction, created } = data;
 
-    if (doc.patientUserId !== user.id) {
+    if (doc.patientUserId !== userId) {
       await assertPatientAccess({
-        viewerUserId: user.id,
+        viewerUserId: userId,
         patientUserId: doc.patientUserId,
       });
     }

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { and, desc, eq, gte, isNull } from "drizzle-orm";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { db } from "@/server/db";
 import {
   chatMessages,
@@ -27,8 +27,7 @@ import { MobileSplitLayout } from "@/components/MobileSplitLayout";
 export default async function PatientDashboardPage() {
   let userId: string;
   try {
-    const user = await requireAuthenticatedUser();
-    userId = user.id;
+    userId = (await requireAuthenticatedUser()).userId;
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return (

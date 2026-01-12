@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
 import { db } from "@/server/db";
 import { patientLabResults } from "@/server/db/schema";
@@ -24,8 +24,8 @@ export async function POST(
 ) {
   try {
     const { patientUserId } = await params;
-    const viewer = await requireAuthenticatedUser();
-    await assertPatientAccess({ viewerUserId: viewer.id, patientUserId });
+    const { userId } = await requireAuthenticatedUser();
+    await assertPatientAccess({ viewerUserId: userId, patientUserId });
 
     const parsed = LabSchema.safeParse(await req.json());
     if (!parsed.success) {

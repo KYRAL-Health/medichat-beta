@@ -6,7 +6,7 @@ import { LoadingDots } from "@/components/LoadingDots";
 
 type PhysicianAccess = {
   physicianUserId: string;
-  physicianWalletAddress: string;
+  physicianClerkUserId: string;
   createdAt: string;
 };
 
@@ -82,7 +82,7 @@ export function AccessList() {
           rows.map((p) => (
             <div key={p.physicianUserId} className="p-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-sm font-medium truncate">{p.physicianWalletAddress}</div>
+                  <div className="text-sm font-medium truncate">{p.physicianClerkUserId}</div>
                 <div className="text-xs text-zinc-500 dark:text-zinc-500">
                   Granted: {new Date(p.createdAt).toLocaleString()}
                 </div>

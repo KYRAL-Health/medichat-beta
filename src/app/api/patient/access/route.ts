@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { db } from "@/server/db";
 import { patientPhysicianAccess, users } from "@/server/db/schema";
 
@@ -9,18 +9,18 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
 
     const rows = await db
       .select({
         physicianUserId: patientPhysicianAccess.physicianUserId,
-        physicianWalletAddress: users.walletAddress,
+        physicianClerkUserId: users.clerkUserId,
         createdAt: patientPhysicianAccess.createdAt,
       })
       .from(patientPhysicianAccess)
-      .innerJoin(users, eq(patientPhysicianAccess.physicianUserId, users.id))
+      .innerJoin(users, eq(patientPhysicianAccess.physicianUserId, users.clerkUserId))
       .where(
-        and(eq(patientPhysicianAccess.patientUserId, user.id), isNull(patientPhysicianAccess.revokedAt))
+        and(eq(patientPhysicianAccess.patientUserId, userId), isNull(patientPhysicianAccess.revokedAt))
       );
 
     return NextResponse.json({ physicians: rows });

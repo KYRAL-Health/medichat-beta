@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, desc } from "drizzle-orm";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { canAccessPatient } from "@/server/authz/patientAccess";
 import { db } from "@/server/db";
 import {
@@ -17,17 +17,17 @@ export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
     const searchParams = req.nextUrl.searchParams;
     const requestedPatientId = searchParams.get("patientUserId");
 
     // Default to self if not specified
-    let targetUserId = user.id;
+    let targetUserId = userId;
 
     // If requesting another patient, verify access
-    if (requestedPatientId && requestedPatientId !== user.id) {
+    if (requestedPatientId && requestedPatientId !== userId) {
       const hasAccess = await canAccessPatient({
-        viewerUserId: user.id,
+        viewerUserId: userId,
         patientUserId: requestedPatientId,
       });
 

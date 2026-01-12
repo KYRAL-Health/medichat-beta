@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
 import { db } from "@/server/db";
 import { documents } from "@/server/db/schema";
@@ -10,7 +10,7 @@ import { getBucketName, putObject } from "@/server/storage/s3";
 
 export const runtime = "nodejs";
 
-const PatientUserIdSchema = z.string().uuid();
+const PatientUserIdSchema = z.string();
 
 function sanitizeFileName(name: string) {
   return name.replace(/[^\w.\-()+\s]/g, "_").slice(0, 120);
@@ -18,7 +18,7 @@ function sanitizeFileName(name: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
 
     const form = await req.formData();
     const file = form.get("file");
@@ -27,10 +27,10 @@ export async function POST(req: NextRequest) {
     const patientUserId =
       typeof patientUserIdRaw === "string" && patientUserIdRaw
         ? PatientUserIdSchema.parse(patientUserIdRaw)
-        : user.id;
+        : userId;
 
-    if (patientUserId !== user.id) {
-      await assertPatientAccess({ viewerUserId: user.id, patientUserId });
+      if (patientUserId !== userId) {
+        await assertPatientAccess({ viewerUserId: userId, patientUserId });
     }
 
     if (!(file instanceof File)) {
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
       .insert(documents)
       .values({
         patientUserId,
-        uploadedByUserId: user.id,
+        uploadedByUserId: userId,
         originalFileName,
         contentType,
         sizeBytes,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { db } from "@/server/db";
 import { patientConditions } from "@/server/db/schema";
 
@@ -15,7 +15,7 @@ const ConditionSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
     const parsed = ConditionSchema.safeParse(await req.json());
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     const created = await db
       .insert(patientConditions)
       .values({
-        patientUserId: user.id,
+          patientUserId: userId,
         conditionName: c.conditionName,
         status: c.status ?? null,
         notedAt,

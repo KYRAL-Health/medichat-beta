@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
-import { AppKitProvider } from "@/context/appkit";
+import { ClerkProvider } from '@clerk/nextjs'
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -58,7 +58,7 @@ export default async function RootLayout({
             })();
           `}
         </Script>
-        <AppKitProvider>{children}</AppKitProvider>
+        <ClerkProvider>{children}</ClerkProvider>
       </body>
     </html>
   );

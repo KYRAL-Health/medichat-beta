@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
-import { reownAppKit } from "@/context/appkit";
-import { DisclaimerModal } from "@/components/modals/DisclaimerModal";
+import { SignOutButton, useUser } from "@clerk/nextjs";
 
 type Mode = "patient" | "physician";
 type Theme = "light" | "dark";
@@ -126,42 +125,36 @@ function NavLink({
 
 export function AppShell({
   mode,
-  disclaimerAccepted,
   children,
 }: {
   mode: Mode;
-  disclaimerAccepted: boolean;
   children: ReactNode;
 }) {
   const router = useRouter();
   const [theme, setTheme] = useState<Theme>("light");
   
-  const [hasAcceptedDisclaimer, setHasAcceptedDisclaimer] = useState(disclaimerAccepted);
+  const [hasAcceptedDisclaimer, setHasAcceptedDisclaimer] = useState(true);
   
   // If the prop updates (due to server revalidation), sync the state
+  const { user, isLoaded } = useUser();
+
   useEffect(() => {
-    if (disclaimerAccepted) {
-      setHasAcceptedDisclaimer(true);
+    if (!isLoaded){
+      return;
     }
-  }, [disclaimerAccepted]);
+
+    if (user?.publicMetadata?.disclaimerAcceptedAt) {
+      setHasAcceptedDisclaimer(true);
+    } else {
+      setHasAcceptedDisclaimer(false);
+    }
+  }, [isLoaded, user]);
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     setTheme(isDarkThemeActive() ? "dark" : "light");
   }, []);
-
-  const handleLogout = async () => {
-    try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "same-origin",
-      });
-    } finally {
-      clearModeCookie();
-      await reownAppKit.disconnect("solana").catch(() => {});
-      window.location.assign("/auth");
-    }
-  };
 
   const handleModeChange = (nextMode: Mode) => {
     setModeCookie(nextMode);
@@ -182,6 +175,12 @@ export function AppShell({
         method: "POST",
       });
       if (res.ok) {
+        // Reload Clerk user to pick up updated publicMetadata
+        try {
+          await user?.reload();
+        } catch (e) {
+          // ignore reload errors
+        }
         setHasAcceptedDisclaimer(true);
         router.refresh(); // Sync server state
       } else {
@@ -332,11 +331,6 @@ export function AppShell({
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-50 transition-colors duration-200 flex">
-      <DisclaimerModal 
-        open={!hasAcceptedDisclaimer} 
-        onAccept={handleDisclaimerAccept} 
-      />
-
       {/* Sidebar (Desktop) */}
       <aside className="hidden md:flex w-64 flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 fixed inset-y-0 z-20">
         <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center h-14 shrink-0 gap-2">
@@ -376,12 +370,13 @@ export function AppShell({
               {mode === "patient" ? "Physician" : "Patient"}
             </button>
 
-            <button
-              onClick={handleLogout}
-              className="text-xs text-red-600 dark:text-red-400 hover:underline px-2"
-            >
-              Log out
-            </button>
+            <SignOutButton>
+              <button
+                className="text-xs text-red-600 dark:text-red-400 hover:underline px-2"
+              >
+                Log out
+              </button>
+            </SignOutButton>
           </div>
 
           <div className="space-y-2 text-center">
@@ -393,11 +388,11 @@ export function AppShell({
               MediChat is an AI assistant, not a doctor.
             </div>
             <div className="flex justify-center gap-2 text-[10px] text-zinc-400 dark:text-zinc-600">
-              <Link href="/terms" className="hover:underline">
+              <Link href="https://app.termly.io/policy-viewer/policy.html?policyUUID=bc5875fc-68c7-4979-a056-6290204cca3a" className="hover:underline">
                 Terms
               </Link>
               <span>·</span>
-              <Link href="/privacy" className="hover:underline">
+              <Link href="https://app.termly.io/policy-viewer/policy.html?policyUUID=95aefd01-158c-49ea-ad35-12a3b679fe79" className="hover:underline">
                 Privacy
               </Link>
             </div>
@@ -490,12 +485,13 @@ export function AppShell({
                   To {mode === "patient" ? "Physician" : "Patient"}
                 </button>
               </div>
-              <button
-                onClick={handleLogout}
-                className="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-md"
-              >
-                Log out
-              </button>
+              <SignOutButton>
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-md"
+                  >
+                    Log out
+                  </button>
+                </SignOutButton>
 
               <div className="space-y-2 text-center pt-2 border-t border-zinc-100 dark:border-zinc-900">
                 <div className="text-[10px] text-zinc-400 dark:text-zinc-600">

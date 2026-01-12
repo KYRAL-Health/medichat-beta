@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
 import { chatCompletion, getDashboardModel } from "@/server/ai";
 import { db } from "@/server/db";
@@ -18,7 +18,7 @@ import {
 export const runtime = "nodejs";
 
 const GenerateSchema = z.object({
-  patientUserId: z.string().uuid().optional(),
+  patientUserId: z.string().optional(),
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -45,15 +45,15 @@ function extractJson(text: string): unknown {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuthenticatedUser();
+    const {userId} = await requireAuthenticatedUser();
     const parsed = GenerateSchema.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
 
-    const patientUserId = parsed.data.patientUserId ?? user.id;
-    if (patientUserId !== user.id) {
-      await assertPatientAccess({ viewerUserId: user.id, patientUserId });
+    const patientUserId = parsed.data.patientUserId ?? userId;
+    if (patientUserId !== userId) {
+      await assertPatientAccess({ viewerUserId: userId, patientUserId });
     }
 
     const date = parsed.data.date ?? new Date().toISOString().slice(0, 10);

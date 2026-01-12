@@ -135,6 +135,7 @@ export async function extractStructuredFromDocumentText(args: {
   });
 
   const content = resp.choices[0]?.message?.content ?? "";
+  console.log("Extraction AI response:", content);
   const json = extractJsonObject(content);
   const parsed = DocumentExtractionSchema.safeParse(json);
   if (!parsed.success) {

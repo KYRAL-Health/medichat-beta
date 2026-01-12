@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
 import {
   chatCompletion,
@@ -13,7 +13,7 @@ import {
 import { proposeMemory, retrieveMemories } from "@/server/ai/tools";
 import { proposePatientRecordSuggestion } from "@/server/ai/patientTools";
 import { db } from "@/server/db";
-import { chatMessages, chatThreads, documents } from "@/server/db/schema";
+import { chatMessages, chatThreads, documents, usageLogs } from "@/server/db/schema";
 import {
   buildPatientContext,
   stringifyPatientContext,
@@ -24,7 +24,7 @@ export const runtime = "nodejs";
 
 const ChatSchema = z.object({
   mode: z.enum(["patient", "physician"]),
-  patientUserId: z.string().uuid().optional(),
+  patientUserId: z.string().optional(),
   threadId: z.string().uuid().optional(),
   message: z.string().min(1).max(8000),
   documentIds: z.array(z.string().uuid()).optional(),
@@ -40,7 +40,7 @@ function safeJsonParse<T>(value: string): T | null {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
     const parsed = ChatSchema.safeParse(await req.json());
     if (!parsed.success) {
       const details =
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
 
     const { mode, message, documentIds } = parsed.data;
     const patientUserId =
-      mode === "patient" ? user.id : parsed.data.patientUserId ?? null;
+      mode === "patient" ? userId : parsed.data.patientUserId ?? null;
 
     if (!patientUserId) {
       return NextResponse.json(
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (mode === "physician") {
-      await assertPatientAccess({ viewerUserId: user.id, patientUserId });
+      await assertPatientAccess({ viewerUserId: userId, patientUserId });
     }
 
     // Verify document access if provided
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
         .insert(chatThreads)
         .values({
           patientUserId,
-          createdByUserId: user.id,
+          createdByUserId: userId,
           contextMode: mode,
           title: mode === "patient" ? "Patient chat" : "Physician chat",
           updatedAt: new Date(),
@@ -278,6 +278,21 @@ export async function POST(req: NextRequest) {
         temperature: 0.4,
       });
 
+      // Record usage for this model call (tokens). Keep logs if user deleted: userId is nullable and set-null on user deletion.
+      try {
+        const tokens = (resp as any)?.usage?.total_tokens ?? 0;
+        await db.insert(usageLogs).values({
+          userId: userId ?? null,
+          kind: "chat",
+          threadId: threadId ?? null,
+          messageId: userMsg?.id ?? null,
+          tokens,
+          meta: { model: getChatModel(), usage: (resp as any)?.usage ?? null },
+        });
+      } catch (e) {
+        console.error("usage log failed", e);
+      }
+
       const choice = resp.choices[0];
       const assistant = choice?.message;
       if (!assistant) {
@@ -300,7 +315,7 @@ export async function POST(req: NextRequest) {
           const args =
             safeJsonParse<{ limit?: number }>(call.function.arguments) ?? {};
           const memories = await retrieveMemories({
-            ownerUserId: user.id,
+            ownerUserId: userId,
             limit: args.limit,
             contextMode: mode,
             subjectPatientUserId: mode === "physician" ? patientUserId : null,
@@ -324,7 +339,7 @@ export async function POST(req: NextRequest) {
             continue;
           }
           const mem = await proposeMemory({
-            ownerUserId: user.id,
+            ownerUserId: userId,
             contextMode: mode,
             subjectPatientUserId: mode === "physician" ? patientUserId : null,
             memoryText: args.memoryText,
@@ -348,7 +363,6 @@ export async function POST(req: NextRequest) {
                 convo.push({
                     role: "tool",
                     tool_call_id: call.id,
-                    name: call.function.name,
                     content: JSON.stringify({ error: "MISSING_DOCUMENT_ID" }),
                 });
                 continue;
@@ -364,7 +378,6 @@ export async function POST(req: NextRequest) {
                  convo.push({
                     role: "tool",
                     tool_call_id: call.id,
-                    name: call.function.name,
                     content: JSON.stringify({ error: "DOCUMENT_NOT_FOUND_OR_ACCESS_DENIED" }),
                 });
                 continue;
@@ -374,7 +387,6 @@ export async function POST(req: NextRequest) {
             convo.push({
                 role: "tool",
                 tool_call_id: call.id,
-                name: call.function.name,
                 content: JSON.stringify({ 
                     filename: data?.document.originalFileName,
                     extracted: data?.extraction?.extractedJson,
@@ -392,7 +404,6 @@ export async function POST(req: NextRequest) {
                 convo.push({
                     role: "tool",
                     tool_call_id: call.id,
-                    name: call.function.name,
                     content: JSON.stringify({ error: "MISSING_ARGS" }),
                 });
                 continue;
@@ -415,14 +426,12 @@ export async function POST(req: NextRequest) {
                 convo.push({
                     role: "tool",
                     tool_call_id: call.id,
-                    name: call.function.name,
                     content: JSON.stringify({ ok: true, suggestionId: suggestion.id }),
                 });
             } catch (e) {
                 convo.push({
                     role: "tool",
                     tool_call_id: call.id,
-                    name: call.function.name,
                     content: JSON.stringify({ error: "SUGGESTION_FAILED" }),
                 });
             }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
 import { db } from "@/server/db";
 import { documents } from "@/server/db/schema";
@@ -20,7 +20,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
     const doc = await db.query.documents.findFirst({
       where: eq(documents.id, id),
     });
@@ -29,8 +29,8 @@ export async function GET(
       return NextResponse.json({ error: "DOCUMENT_NOT_FOUND" }, { status: 404 });
     }
 
-    if (doc.patientUserId !== user.id) {
-      await assertPatientAccess({ viewerUserId: user.id, patientUserId: doc.patientUserId });
+    if (doc.patientUserId !== userId) {
+      await assertPatientAccess({ viewerUserId: userId, patientUserId: doc.patientUserId });
     }
 
     if (!doc.objectKey) {

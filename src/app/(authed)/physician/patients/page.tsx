@@ -1,6 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { db } from "@/server/db";
 import {
   patientDailyDashboards,
@@ -14,8 +14,7 @@ import { PatientListClient } from "@/components/PatientListClient";
 export default async function PhysicianPatientsPage() {
   let physicianUserId: string;
   try {
-    const user = await requireAuthenticatedUser();
-    physicianUserId = user.id;
+    physicianUserId = (await requireAuthenticatedUser()).userId;
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return (
@@ -30,14 +29,14 @@ export default async function PhysicianPatientsPage() {
   const rows = await db
     .select({
       patientUserId: patientPhysicianAccess.patientUserId,
-      walletAddress: users.walletAddress,
+      patientClerkUserId: users.clerkUserId,
       displayName: userProfiles.displayName,
       ageYears: patientProfiles.ageYears,
       gender: patientProfiles.gender,
       dashboardJson: patientDailyDashboards.dashboardJson,
     })
     .from(patientPhysicianAccess)
-    .innerJoin(users, eq(patientPhysicianAccess.patientUserId, users.id))
+    .innerJoin(users, eq(patientPhysicianAccess.patientUserId, users.clerkUserId))
     .leftJoin(userProfiles, eq(userProfiles.userId, patientPhysicianAccess.patientUserId))
     .leftJoin(
       patientProfiles,
@@ -59,7 +58,7 @@ export default async function PhysicianPatientsPage() {
 
   const patients = rows.map((p) => ({
     patientUserId: p.patientUserId,
-    walletAddress: p.walletAddress,
+    patientClerkUserId: p.patientClerkUserId,
     displayName: p.displayName,
     ageYears: p.ageYears,
     gender: p.gender,

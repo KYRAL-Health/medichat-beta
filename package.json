@@ -12,13 +12,12 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.958.0",
-    "@reown/appkit": "^1.8.15",
-    "@reown/appkit-adapter-solana": "^1.8.15",
-    "@solana/wallet-adapter-wallets": "^0.19.37",
+    "@clerk/nextjs": "latest",
+    "@sentry/nextjs": "^10.32.1",
     "@tailwindcss/typography": "^0.5.19",
-    "bs58": "^6.0.0",
     "date-fns": "^4.1.0",
     "drizzle-orm": "^0.44.7",
+    "import-in-the-middle": "^2.0.1",
     "jsonwebtoken": "^9.0.3",
     "next": "16.0.10",
     "openai": "^6.15.0",
@@ -29,8 +28,8 @@
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "svix": "^1.84.1",
     "thread-stream": "^4.0.0",
-    "tweetnacl": "^1.0.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -51,6 +50,14 @@
     "overrides": {
       "pino": "^10.1.0",
       "thread-stream": "^4.0.0"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "@clerk/shared",
+      "bufferutil",
+      "esbuild",
+      "sharp",
+      "unrs-resolver",
+      "utf-8-validate"
+    ]
   }
 }

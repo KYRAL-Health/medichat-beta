@@ -1,7 +1,7 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
 
 import { HealthMapClient } from "@/components/HealthMapClient";
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { db } from "@/server/db";
 import {
   documents,
@@ -13,41 +13,41 @@ import {
 } from "@/server/db/schema";
 
 export default async function PatientMapPage() {
-  const user = await requireAuthenticatedUser();
+  const { userId } = await requireAuthenticatedUser();
 
   const docs = await db.query.documents.findMany({
-    where: eq(documents.patientUserId, user.id),
+    where: eq(documents.patientUserId, userId),
     orderBy: [desc(documents.createdAt)],
     limit: 20,
   });
 
   const labs = await db.query.patientLabResults.findMany({
-    where: eq(patientLabResults.patientUserId, user.id),
+    where: eq(patientLabResults.patientUserId, userId),
     orderBy: [desc(patientLabResults.collectedAt)],
     limit: 250,
   });
 
   const vitals = await db.query.patientVitals.findMany({
-    where: eq(patientVitals.patientUserId, user.id),
+    where: eq(patientVitals.patientUserId, userId),
     orderBy: [desc(patientVitals.measuredAt)],
     limit: 250,
   });
 
   const meds = await db.query.patientMedications.findMany({
-    where: eq(patientMedications.patientUserId, user.id),
+    where: eq(patientMedications.patientUserId, userId),
     orderBy: [desc(patientMedications.notedAt)],
     limit: 250,
   });
 
   const conditions = await db.query.patientConditions.findMany({
-    where: eq(patientConditions.patientUserId, user.id),
+    where: eq(patientConditions.patientUserId, userId),
     orderBy: [desc(patientConditions.notedAt)],
     limit: 250,
   });
 
   const memories = await db.query.userMemories.findMany({
     where: and(
-      eq(userMemories.ownerUserId, user.id),
+      eq(userMemories.ownerUserId, userId),
       eq(userMemories.status, "accepted"),
       eq(userMemories.contextMode, "patient"),
       isNull(userMemories.subjectPatientUserId)
@@ -67,7 +67,7 @@ export default async function PatientMapPage() {
 
       <HealthMapClient
         mode="patient"
-        patientUserId={user.id}
+        patientUserId={userId}
         documents={docs.map((d) => ({
           id: d.id,
           originalFileName: d.originalFileName,

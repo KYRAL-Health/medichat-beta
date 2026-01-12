@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { requireAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
 import { db } from "@/server/db";
 import { userProfiles } from "@/server/db/schema";
@@ -19,11 +18,11 @@ export async function PUT(
 ) {
   try {
     const { patientUserId } = await params;
-    const user = await requireAuthenticatedUser();
+    const { userId } = await requireAuthenticatedUser();
 
     // Check access: caller must be the patient OR an authorized physician
-    if (patientUserId !== user.id) {
-      await assertPatientAccess({ viewerUserId: user.id, patientUserId });
+    if (patientUserId !== userId) {
+      await assertPatientAccess({ viewerUserId: userId, patientUserId });
     }
 
     const parsed = UpdateNameSchema.safeParse(await req.json());
