@@ -1,25 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTheme } from '@/components/ClientProviders';
 
 import { DisclaimerModal } from "@/components/DisclaimerModal";
 import { SignIn } from "@clerk/nextjs";
 
 type Theme = "light" | "dark";
 
-function setThemeCookie(theme: Theme) {
-  // 1 year
-  const maxAgeSeconds = 60 * 60 * 24 * 365;
-  document.cookie = `medichat_theme=${theme}; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax`;
-}
-
-function applyTheme(theme: Theme) {
-  document.documentElement.classList.toggle("dark", theme === "dark");
-  document.documentElement.style.colorScheme = theme;
-  setThemeCookie(theme);
-}
-
-function ThemeIcon({ theme }: { theme: Theme }) {
+function ThemeIcon({ theme }: { theme: Theme | null }) {
   if (theme === "dark") {
     // Sun icon (switch to light)
     return (
@@ -50,13 +39,14 @@ function ThemeIcon({ theme }: { theme: Theme }) {
 }
 
 export default function AuthPage() {
-  const [theme, setTheme] = useState<Theme>("light");
+  const { theme: providerTheme, toggleTheme } = useTheme();
+  const [theme, setTheme] = useState<Theme>(providerTheme ?? "light");
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
 
   useEffect(() => {
-    setTheme(document.documentElement.classList.contains("dark") ? "dark" : "light");
-    
+    setTheme(providerTheme ?? "light");
+
     // Check if disclaimer was already accepted
     const accepted = localStorage.getItem("medichat_disclaimer_accepted");
     if (accepted === "true") {
@@ -64,7 +54,7 @@ export default function AuthPage() {
     } else {
       setShowDisclaimer(true);
     }
-  }, []);
+  }, [providerTheme]);
 
   const handleDisclaimerAccept = () => {
     setDisclaimerAccepted(true);
@@ -83,16 +73,14 @@ export default function AuthPage() {
         <button
           type="button"
           onClick={() => {
-            const next: Theme = theme === "dark" ? "light" : "dark";
-            setTheme(next);
-            applyTheme(next);
+            toggleTheme();
           }}
           className="px-3 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
           aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
           title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
         >
           <span className="sr-only">Toggle theme</span>
-          <ThemeIcon theme={theme} />
+          <ThemeIcon theme={providerTheme ?? theme} />
         </button>
       </div>
       <div className="w-full max-w-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-8 rounded-lg space-y-5 transition-colors duration-200">

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
+import { useTheme } from '@/components/ClientProviders';
 
 import { SignOutButton, UserButton, useUser } from "@clerk/nextjs";
 
@@ -19,24 +20,11 @@ function clearModeCookie() {
   document.cookie = "medichat_mode=; Path=/; Max-Age=0; SameSite=Lax";
 }
 
-function setThemeCookie(theme: Theme) {
-  // 1 year
-  const maxAgeSeconds = 60 * 60 * 24 * 365;
-  document.cookie = `medichat_theme=${theme}; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax`;
-}
+// theme is handled by ClientProviders
 
-function isDarkThemeActive() {
-  return document.documentElement.classList.contains("dark");
-}
-
-function applyTheme(theme: Theme) {
-  document.documentElement.classList.toggle("dark", theme === "dark");
-  document.documentElement.style.colorScheme = theme;
-  setThemeCookie(theme);
-}
-
-function ThemeIcon({ theme }: { theme: Theme }) {
-  if (theme === "dark") {
+function ThemeIcon({ theme }: { theme: Theme | null }) {
+  const t = theme === null ? "light" : theme;
+  if (t === "dark") {
     // Sun icon (switch to light)
     return (
       <svg
@@ -131,7 +119,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   const router = useRouter();
-  const [theme, setTheme] = useState<Theme>("light");
+  const { theme, toggleTheme } = useTheme();
   
   const [hasAcceptedDisclaimer, setHasAcceptedDisclaimer] = useState(true);
   
@@ -152,10 +140,6 @@ export function AppShell({
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  useEffect(() => {
-    setTheme(isDarkThemeActive() ? "dark" : "light");
-  }, []);
-
   const handleModeChange = (nextMode: Mode) => {
     setModeCookie(nextMode);
     window.location.assign(
@@ -163,11 +147,7 @@ export function AppShell({
     );
   };
 
-  const toggleTheme = () => {
-    const next: Theme = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    applyTheme(next);
-  };
+  // use provider toggleTheme for theme changes
 
   const handleDisclaimerAccept = async () => {
     try {
@@ -351,7 +331,7 @@ export function AppShell({
         <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
           <div className="flex items-center gap-2 justify-between">
             <button
-              onClick={toggleTheme}
+              onClick={() => toggleTheme()}
               className="p-2 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-600 dark:text-zinc-400"
               title="Toggle Theme"
             >
@@ -472,7 +452,7 @@ export function AppShell({
             <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 space-y-4">
               <div className="flex items-center justify-between px-2">
                 <span className="text-sm font-medium">Theme</span>
-                <button onClick={toggleTheme} className="p-2 border rounded-md">
+                <button onClick={() => toggleTheme()} className="p-2 border rounded-md">
                   <ThemeIcon theme={theme} />
                 </button>
               </div>
