@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
       expiresAt,
     });
 
-    const inviteUrl = `${req.nextUrl.origin}/invite/${token}`;
+    const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`;
 
     return NextResponse.json({
       invite: {
