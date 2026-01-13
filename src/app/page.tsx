@@ -6,7 +6,7 @@ import { auth } from "@clerk/nextjs/server";
 export default async function Home() {
   const { isAuthenticated } = await auth();
   if (!isAuthenticated) {
-    redirect("/auth");
+    redirect("/auth/sign-in");
   }
 
   // Route by mode (patient vs physician). Default: patient.

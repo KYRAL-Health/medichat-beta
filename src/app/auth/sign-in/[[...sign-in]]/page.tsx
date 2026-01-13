@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { SignInButton, SignUpButton } from "@clerk/nextjs";
 
 import { DisclaimerModal } from "@/components/DisclaimerModal";
+import { SignIn } from "@clerk/nextjs";
 
 type Theme = "light" | "dark";
 
@@ -102,14 +101,7 @@ export default function AuthPage() {
           <p className="text-sm text-zinc-600 dark:text-zinc-400">Sign in or create an account to continue.</p>
         </div>
 
-        <div className="flex gap-2">
-          <SignInButton mode="modal">
-            <button className="w-full px-4 py-2 rounded bg-black text-white text-sm font-medium">Sign in</button>
-          </SignInButton>
-          <SignUpButton mode="modal">
-            <button className="w-full px-4 py-2 rounded border text-sm">Sign up</button>
-          </SignUpButton>
-        </div>
+        <SignIn withSignUp={true}/>
 
         <div className="text-center space-y-2">
           <p className="text-xs text-zinc-500 dark:text-zinc-500">
@@ -123,4 +115,3 @@ export default function AuthPage() {
     </div>
   );
 }
-

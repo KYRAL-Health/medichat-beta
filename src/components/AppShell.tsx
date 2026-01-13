@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { SignOutButton, useUser } from "@clerk/nextjs";
+import { SignOutButton, UserButton, useUser } from "@clerk/nextjs";
 
 type Mode = "patient" | "physician";
 type Theme = "light" | "dark";
@@ -380,6 +380,10 @@ export function AppShell({
           </div>
 
           <div className="space-y-2 text-center">
+            <UserButton showName={true} />
+          </div>
+
+          <div className="space-y-2 text-center">
             <div className="text-[10px] text-zinc-400 dark:text-zinc-600">
               <span className="font-semibold text-red-500">
                 Call 911 for emergencies.
@@ -492,6 +496,10 @@ export function AppShell({
                     Log out
                   </button>
                 </SignOutButton>
+
+                <div className="space-y-2 text-center">
+                <UserButton showName={true} />
+              </div>
 
               <div className="space-y-2 text-center pt-2 border-t border-zinc-100 dark:border-zinc-900">
                 <div className="text-[10px] text-zinc-400 dark:text-zinc-600">

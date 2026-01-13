@@ -11,7 +11,7 @@ export default async function AuthedLayout({
 }>) {
   const { isAuthenticated } = await auth();
   if (!isAuthenticated) {
-    redirect("/auth");
+    redirect("/auth/sign-in");
   }
   
   const cookieStore = await cookies();

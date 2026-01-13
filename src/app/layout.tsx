@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { ClerkProvider } from '@clerk/nextjs'
+import { dark } from '@clerk/themes';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -58,7 +59,7 @@ export default async function RootLayout({
             })();
           `}
         </Script>
-        <ClerkProvider>{children}</ClerkProvider>
+        <ClerkProvider appearance={{ theme: theme === "dark" ? dark : undefined }}>{children}</ClerkProvider>
       </body>
     </html>
   );
