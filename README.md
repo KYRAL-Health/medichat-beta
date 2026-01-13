@@ -17,7 +17,7 @@ Medichat is an open-source AI health assistant that provides:
 
 Available now at: https://medichat.kyralhealth.com
 
-## Features
+## Key Capabilities
 
 - User-friendly form interface to provide patient symptoms, existing conditions, medications, and/or lab results.
 - Comprehensive data fields for analysis include:
@@ -30,7 +30,7 @@ Available now at: https://medichat.kyralhealth.com
   - Physician view to manage patients and create invite links
 
 ## Technical Specifications:
-- Model: QWEN3-NEXT-80B (4-bit quantized)
+- Model: QWEN3-NEXT-80B (QLORA finetuned)
 - Hardware: Runs on 2x NVIDIA H100 GPUs (192 GB VRAM)
 - Key advantage: Small enough to run locally, smart enough to help
  
@@ -43,83 +43,73 @@ Available now at: https://medichat.kyralhealth.com
 
 This application is for informational purposes only and should not replace professional medical advice. Always consult with qualified healthcare professionals for medical diagnosis and treatment. Please refer to Kyral Health's Disclaimer, Privacy Policy and Terms and Conditions at https://kyralhealth.com
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
-
 ## Features
 
-- **Reown AppKit** - Email and wallet authentication
-- **Lazy User Creation** - Users are created in the database only when needed (e.g., when creating todos)
-- **JWT Sessions** - Secure session management with HTTP-only cookies
-- **Drizzle ORM** - Type-safe database queries
+- **Secure Authentication** - Powered by Clerk
+- **AI Health Assistant** - Integrated with QWEN3-NEXT-80B (via vLLM) or OpenAI-compatible providers for symptom analysis and health insights.
+- **Document Intelligence** - Upload and analyze PDFs/texts for medical history context using localized RAG.
+- **Dual-Mode Interface**:
+  - **Patient Portal**: Symptom logging, chat history, document uploads, and daily dashboards.
+  - **Physician Portal**: Patient invitations, data review, and management dashboards.
+- **Modern Stack** - built with Next.js 15+ (App Router), Tailwind CSS 4, and Drizzle ORM.
+- **Privacy Focused** - Capable of full self-hosting with local LLM inference.
+
+## Tech Stack
+
+- **Framework:** [Next.js 16](https://nextjs.org/) (App Router)
+- **Database:** PostgreSQL with [Drizzle ORM](https://orm.drizzle.team/)
+- **Authentication:** [Clerk](https://clerk.com/)
+- **Styling:** [Tailwind CSS 4](https://tailwindcss.com/)
+- **AI/LLM:** OpenAI SDK, [vLLM](https://docs.vllm.ai/en/latest/) (for local hosting)
+- **Monitoring:** [Sentry](https://sentry.io/)
 
 ## Getting Started
 
-### Environment Variables
+### Prerequisites
 
-Create a `.env.local` file with:
+- Node.js 20+
+- pnpm
+- Docker & Docker Compose (required for local LLM hosting)
+- PostgreSQL Database
+
+### 1. Environment Setup
+
+Copy the example environment file:
 
 ```bash
-DATABASE_URL=your_database_connection_string
-JWT_SECRET=your_jwt_secret_key
-NEXT_PUBLIC_REOWN_PROJECT_ID=your_reown_project_id
-
-# AI Configuration
-# Base URL for the OpenAI-compatible API (default: https://openrouter.ai/api/v1)
-AI_API_BASE=https://openrouter.ai/api/v1
-
-# API Key (required)
-AI_API_KEY=your_api_key
-
-# Models (optional, defaults to openai/gpt-4o and openai/gpt-4o-mini)
-AI_MODEL_CHAT=openai/gpt-4o
-AI_MODEL_EXTRACT=openai/gpt-4o-mini
-AI_MODEL_DASHBOARD=openai/gpt-4o-mini
+cp .env.example .env.local
 ```
 
-### Database Setup
+Fill in the required environment variables in `.env.local`:
+- **Database**: `DATABASE_URL`
+- **Clerk**: `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`
+- **AI Provider**: `AI_API_KEY`, `AI_API_BASE` (defaults to OpenRouter, or local vLLM)
 
-1. Run migrations or push schema:
-   ```bash
-   pnpm db:push
-   ```
+### 2. Installation
 
-2. **If using Supabase**: You may need to configure Row Level Security (RLS) policies or use a service role key for the `DATABASE_URL`. The app uses lazy user creation, so authentication works even if RLS blocks initial user creation - users will be created when they first interact with database features (like creating todos).
-
-### Getting Started
-
-First, run the development server:
+Install dependencies:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+```
+
+### 3. Database Setup
+
+Push the schema to your database:
+
+```bash
+pnpm db:push
+```
+
+### 4. Running the Application
+
+**Development Mode:**
+
+```bash
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-# medichat-beta
+Open [http://localhost:3000](http://localhost:3000) with your browser.
 
 ## License
 
