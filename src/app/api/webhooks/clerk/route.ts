@@ -2,7 +2,7 @@ import { Webhook } from 'svix'
 import { headers } from 'next/headers'
 import { db } from '@/server/db'
 import { users, userEmails } from '@/server/db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, isNull, and } from 'drizzle-orm'
 
 export async function POST(req: Request) {
   const SIGNING_SECRET = process.env.CLERK_WEBHOOK_SECRET
@@ -73,10 +73,15 @@ export async function POST(req: Request) {
       const email = getEmailFromEvtData(evt.data)
       if (email) {
         try {
-          await db.insert(userEmails).values({ email })
+          const existingByClerk = await db.select().from(userEmails).where(eq(userEmails.clerkUserId, id))
+          if (existingByClerk && existingByClerk.length > 0) {
+            await db.update(userEmails).set({ email }).where(eq(userEmails.clerkUserId, id))
+          } else {
+            await db.insert(userEmails).values({ email, clerkUserId: id })
+          }
         } catch (e) {
           // ignore duplicate / constraint errors
-          console.debug('user_emails insert skipped:', e)
+          console.debug('user_emails upsert/insert skipped:', e)
         }
       }
     } catch (e) {
@@ -101,10 +106,19 @@ export async function POST(req: Request) {
       const email = getEmailFromEvtData(evt.data)
       if (email) {
         try {
-          await db.insert(userEmails).values({ email })
+          const existingByClerk = await db.select().from(userEmails).where(eq(userEmails.clerkUserId, id))
+          if (existingByClerk && existingByClerk.length > 0) {
+            await db.update(userEmails).set({ email }).where(eq(userEmails.clerkUserId, id))
+          } else {
+            const existingByEmail = await db.select().from(userEmails).where(and(eq(userEmails.email, email), isNull(userEmails.clerkUserId)))
+            if (existingByEmail && existingByEmail.length > 0) {
+              await db.update(userEmails).set({ clerkUserId: id }).where(eq(userEmails.email, email))
+            } else {
+              await db.insert(userEmails).values({ email, clerkUserId: id })
+            }
+          }
         } catch (e) {
-          // ignore duplicate / constraint errors
-          console.debug('user_emails insert skipped:', e)
+          console.debug('user_emails upsert/update skipped:', e)
         }
       }
     } catch (e) {

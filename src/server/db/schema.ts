@@ -12,6 +12,7 @@ import {
   uniqueIndex,
   uuid,
   pgEnum,
+  
 } from "drizzle-orm/pg-core";
 
 export const users = pgTable(
@@ -27,9 +28,17 @@ export const users = pgTable(
 export const userEmails = pgTable(
   "user_emails",
   {
-    email: text("email").primaryKey().notNull(),
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    clerkUserId: text("clerk_user_id").references(() => users.clerkUserId, {
+      onDelete: "set null",
+    }),
   }
 );
+
+export const userEmailsRelations = relations(userEmails, ({ one }) => ({
+  user: one(users, { fields: [userEmails.clerkUserId], references: [users.clerkUserId] }),
+}));
 /**
  * Demo note:
  * This schema is intentionally pragmatic for MVP velocity (not HIPAA-grade).
