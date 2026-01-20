@@ -1,4 +1,4 @@
-# Kyral MediChat AI Assistant (Beta)
+# Kyral MediChat AI Health Assistant (Beta)
 
 Kyral's AI medical health assistant Medichat is an open-source, privacy-first AI health assistant that puts patients back in control of their health data. Medichat is powered by QWEN3-NEXT-80B, a custom-trained open-source model fine-tuned on the de-identified PMC Patient Summaries dataset — a peer-reviewed resource of real clinical case studies.
 
