@@ -503,7 +503,7 @@ export function ChatPanel({
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder="Ask anything about your health..."
+                        placeholder="Ask anything about your health in any language..."
                         className="flex-1 min-h-[44px] max-h-48 bg-transparent border-none focus-visible:ring-0 p-2 text-base resize-none"
                         rows={1}
                     />
