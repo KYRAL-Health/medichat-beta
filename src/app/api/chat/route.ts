@@ -7,11 +7,13 @@ import { assertPatientAccess } from "@/server/authz/patientAccess";
 import {
   chatCompletion,
   getChatModel,
+  getExtractModel,
   type AiTool,
   type ChatMessage,
 } from "@/server/ai";
 import { proposeMemory, retrieveMemories } from "@/server/ai/tools";
 import { proposePatientRecordSuggestion } from "@/server/ai/patientTools";
+import { searchPubMed, formatArticleCitations } from "@/server/ai/pubmedTools";
 import { db } from "@/server/db";
 import { chatMessages, chatThreads, documents, usageLogs } from "@/server/db/schema";
 import {
@@ -35,6 +37,49 @@ function safeJsonParse<T>(value: string): T | null {
     return JSON.parse(value) as T;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Classifies whether a message is a medical question and produces a PubMed query.
+ * Uses the extract model (cheap, fast) with temperature 0 for determinism.
+ * Returns { isMedical: false, pubmedQuery: null } on any failure so chat always proceeds.
+ * Accepts up to the last 5 chat history messages as context for better classification.
+ */
+async function classifyMedicalQuery(
+  message: string,
+  recentHistory: ChatMessage[] = []
+): Promise<{ isMedical: boolean; pubmedQuery: string | null }> {
+  try {
+    const historyMessages = recentHistory.slice(-5);
+    const resp = await chatCompletion({
+      model: getExtractModel(),
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a medical question classifier. Respond ONLY with a valid JSON object — no markdown, no prose.\n" +
+            'Schema: { "isMedical": boolean, "pubmedQuery": string | null }\n' +
+            "Set isMedical=true if the message asks about medical conditions, symptoms, treatments, medications, diagnostics, physiology, or clinical guidelines.\n" +
+            "If isMedical=true, produce a concise PubMed search query (2-6 keywords) that would find relevant peer-reviewed articles.\n" +
+            "If isMedical=false, set pubmedQuery=null.",
+        },
+        ...historyMessages,
+        { role: "user", content: message },
+      ],
+      temperature: 0,
+    });
+    const raw = resp.choices[0]?.message?.content ?? "";
+    const parsed = safeJsonParse<{ isMedical: boolean; pubmedQuery: string | null }>(raw);
+    if (!parsed || typeof parsed.isMedical !== "boolean") {
+      return { isMedical: false, pubmedQuery: null };
+    }
+    return {
+      isMedical: parsed.isMedical,
+      pubmedQuery: parsed.isMedical && parsed.pubmedQuery ? parsed.pubmedQuery : null,
+    };
+  } catch {
+    return { isMedical: false, pubmedQuery: null };
   }
 }
 
@@ -134,37 +179,137 @@ export async function POST(req: NextRequest) {
     const patientCtx = await buildPatientContext(patientUserId);
     const patientCtxText = stringifyPatientContext(patientCtx);
 
+    // --- Deterministic PubMed orchestration ---
+    // Classify the query with a cheap model call, then fetch citations ourselves.
+    // The model never gets a searchMedicalLiterature tool; evidence is injected into the system prompt.
+    const classifierHistory: ChatMessage[] = chronological
+      .filter((m) => m.id !== userMsg?.id && (m.senderRole === "user" || m.senderRole === "assistant"))
+      .slice(-10)
+      .map((m) => ({ role: m.senderRole as "user" | "assistant", content: m.content }));
+    const { isMedical, pubmedQuery } = await classifyMedicalQuery(message, classifierHistory);
+    let citationsBlock: string | null = null;
+    if (isMedical && pubmedQuery) {
+      console.log("[PubMed] Medical question detected. Query:", pubmedQuery);
+      try {
+        const articles = await searchPubMed(pubmedQuery, 5);
+        if (articles.length > 0) {
+          citationsBlock = formatArticleCitations(articles);
+          console.log("[PubMed] Citations fetched:", articles.length);
+        } else {
+          console.log("[PubMed] No articles found for query:", pubmedQuery);
+        }
+      } catch (e) {
+        console.error("[PubMed] Search failed:", e);
+      }
+    }
+
     const patientSystem = [
       "You are MediChat, a medical AI assistant speaking directly to the patient.",
-      "Favour shorter responses that prompt engagement from the user.",
-      "Be concise, empathetic, and structured. If symptoms suggest an emergency, advise seeking urgent care.",
-      "Ground your response in PatientContext when available, and ask clarifying questions when needed.",
+      "Be empathetic, clear, and structured.",
+      "If symptoms suggest an emergency, advise seeking urgent care.",
+      "Ground your response in PatientContext when available.",
+      "Ask clarifying questions when appropriate.",
       "Do not provide medical advice; provide informational guidance and encourage clinician review where appropriate.",
+
+      "Response Style Rules:",
+      "- Keep explanations clear and patient-friendly.",
+      "- When citations are required, completeness takes priority over brevity.",
+      "- Do NOT omit required structural sections for the sake of conciseness.",
+
       "Personalization:",
       "- Use retrieveMemories to fetch accepted memories for the current user (patient context only).",
-      "- If you learn something stable/useful (health history, preferences, goals), you MAY call logMemory to propose remembering it.",
-      "- If you learn a concrete fact suitable for the medical record (meds, vitals, diagnosis, or profile change), call proposePatientRecordSuggestion.",
-      "- Only propose memories that are clear, specific, and likely to remain true.",
+      "- You MAY call logMemory to propose remembering stable health history.",
+      "- If you identify a concrete medical record update, call proposePatientRecordSuggestion.",
+      "- Only propose memories that are clear and likely to remain true.",
+
+      ...(citationsBlock
+        ? [
+          "",
+          "=== MANDATORY EVIDENCE REQUIREMENT ===",
+          "Peer-reviewed PubMed citations have already been retrieved.",
+          "You MUST append a section titled exactly:",
+          "References",
+          "",
+          "In that section, you MUST copy the citation block below EXACTLY as written.",
+          "Do NOT modify formatting.",
+          "Do NOT summarize.",
+          "Do NOT reorder.",
+          "Do NOT omit any line.",
+          "Do NOT add extra commentary inside the References section.",
+          "",
+          "If the References section is missing or altered, the response is INVALID.",
+          "",
+          "Citation Block (copy verbatim below the 'References' heading):",
+          citationsBlock,
+          "",
+          "FINAL CHECK BEFORE RESPONDING:",
+          "Ensure your response ends with the References section exactly as provided."
+        ]
+        : isMedical
+          ? [
+            "",
+            "Evidence Notice:",
+            "- A PubMed search was performed but returned no results.",
+            "- Inform the patient that no peer-reviewed citations were found.",
+            "- Encourage clinician consultation."
+          ]
+          : []),
+
       "",
       patientCtxText,
       docContext,
     ].join("\n");
 
     const physicianSystem = [
-      "You are MediChat, a medical AI assistant speaking to a clinician (physician view).",
-      "Respond in a clinician-friendly, highly structured way:",
-      "- Brief summary",
-      "- Key risks / red flags to watch",
-      "- Most useful clarifying questions",
-      "- Suggested next evaluations (informational; encourage clinician judgment)",
-      "Be concise and avoid fluff.",
-      "Ground your response in PatientContext when available; do not hallucinate missing data.",
-      "Do not provide medical advice; provide informational suggestions and encourage clinician review where appropriate.",
+      "You are MediChat, a medical AI assistant speaking to a clinician.",
+      "Respond in a structured clinical format:",
+      "- Brief Summary",
+      "- Key Risks / Red Flags",
+      "- Clarifying Questions",
+      "- Suggested Next Evaluations (informational only)",
+
+      "Be precise and clinically concise.",
+      "Ground your response in PatientContext; do not hallucinate missing data.",
+      "Do not provide medical advice; provide informational suggestions and encourage clinician judgment.",
+
       "Personalization:",
-      "- Use retrieveMemories to fetch accepted memories for the clinician, scoped to this patient and physician mode.",
-      "- You MAY call logMemory to propose remembering stable patient-specific context for this clinician (e.g., 'Patient reports X baseline').",
-      "- If you identify a concrete update for the medical record, call proposePatientRecordSuggestion.",
-      "- Only propose memories that are clear, specific, and likely to remain true.",
+      "- Use retrieveMemories scoped to this patient and physician mode.",
+      "- You MAY log stable patient-specific baseline context.",
+      "- Propose concrete medical record updates when appropriate.",
+      "- Only propose stable, specific facts.",
+
+      ...(citationsBlock
+        ? [
+          "",
+          "=== MANDATORY EVIDENCE REQUIREMENT ===",
+          "Peer-reviewed PubMed citations have already been retrieved.",
+          "You MUST append a section titled exactly:",
+          "Key Studies",
+          "",
+          "In that section, copy the citation block below EXACTLY as written.",
+          "Do NOT modify formatting.",
+          "Do NOT summarize.",
+          "Do NOT reorder.",
+          "Do NOT omit any citation.",
+          "Do NOT add commentary inside the Key Studies section.",
+          "",
+          "If the Key Studies section is missing or altered, the response is INVALID.",
+          "",
+          "Citation Block (copy verbatim below the 'Key Studies' heading):",
+          citationsBlock,
+          "",
+          "FINAL CHECK BEFORE RESPONDING:",
+          "Ensure your response ends with the Key Studies section exactly as provided."
+        ]
+        : isMedical
+          ? [
+            "",
+            "Evidence Notice:",
+            "- A PubMed search was performed but returned no results.",
+            "- State the absence of retrieved citations.",
+          ]
+          : []),
+
       "",
       patientCtxText,
       docContext,
@@ -243,6 +388,8 @@ export async function POST(req: NextRequest) {
     ];
 
     const system = mode === "physician" ? physicianSystem : patientSystem;
+
+    console.log(system);
 
     let convo: ChatMessage[] = [{ role: "system", content: system }];
 
@@ -464,6 +611,8 @@ export async function POST(req: NextRequest) {
     const assistantText =
       assistantContent?.trim() ||
       "I'm not sure I understood—could you rephrase?";
+
+    console.log(assistantText)
 
     const savedAssistant = await db
       .insert(chatMessages)

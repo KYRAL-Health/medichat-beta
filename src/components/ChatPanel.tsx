@@ -385,13 +385,29 @@ export function ChatPanel({
                 >
                 <div
                     className={[
-                    "max-w-[85%] rounded-2xl px-5 py-3 text-base leading-relaxed",
+                    "max-w-[85%] rounded-2xl px-4 py-3 text-[0.9375rem] leading-relaxed",
                     m.role === "user"
                         ? "bg-zinc-900 text-white dark:bg-white dark:text-black rounded-br-sm"
-                        : "bg-zinc-100 dark:bg-zinc-900 rounded-bl-sm prose prose-zinc dark:prose-invert max-w-none",
+                        : "bg-zinc-100 dark:bg-zinc-900 rounded-bl-sm prose prose-zinc dark:prose-invert max-w-none prose-p:text-[0.9375rem] prose-li:text-[0.9375rem]",
                     ].join(" ")}
                 >
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                        a: ({ node, ...props }) => (
+                        <a
+                            {...props}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-300 dark:decoration-blue-700 hover:text-blue-800 dark:hover:text-blue-300 hover:decoration-blue-500 transition-colors"
+                        />
+                        ),
+                        // Make sure paragraphs don't add extra margin in tight sequences
+                        p: ({ node, ...props }) => (
+                        <p {...props} className="my-1.5 last:mb-0 first:mt-0" />
+                        ),
+                    }}
+                    >
                     {m.content}
                     </ReactMarkdown>
                 </div>

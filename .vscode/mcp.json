@@ -1,7 +1,7 @@
 {
   "servers": {
     "Sentry": {
-      "url": "https://mcp.sentry.dev/mcp/kyral-health/javascript-nextjs",
+      "url": "https://mcp.sentry.dev/mcp",
       "type": "http"
     }
   }

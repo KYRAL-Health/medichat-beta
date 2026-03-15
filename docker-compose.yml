@@ -55,6 +55,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN}
       - SENTRY_DSN=${SENTRY_DSN}
+      - NCBI_API_KEY=${NCBI_API_KEY}
 
       # AI Configuration
       - AI_API_BASE=${AI_API_BASE}
