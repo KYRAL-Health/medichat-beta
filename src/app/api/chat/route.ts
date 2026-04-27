@@ -376,7 +376,14 @@ export async function POST(req: NextRequest) {
               summaryText: { type: "string", description: "Human readable summary of what is being changed/added." },
               payloadJson: {
                 type: "object",
-                description: "The structured data for the update. Fields match the database schema for the kind.",
+                description: [
+                  "The structured data for the update. Required fields per kind:",
+                  "- profile_update: any subset of { dateOfBirth, biologicalSex, heightCm, weightKg, bloodType, allergies, emergencyContactName, emergencyContactPhone }",
+                  "- vital: { measuredAt? (ISO8601), systolic?, diastolic?, heartRate?, temperatureC? }",
+                  "- lab: { testName (required), valueText (required), valueNum?, unit?, referenceRange?, flag?, collectedAt? (ISO8601) }",
+                  "- medication: { medicationName (required), dose?, frequency?, active? }",
+                  "- condition: { conditionName (required), status? (e.g. 'active'|'resolved'|'chronic') }",
+                ].join(" "),
                 additionalProperties: true,
               },
             },
