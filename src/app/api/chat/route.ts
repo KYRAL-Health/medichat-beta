@@ -449,7 +449,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      convo.push({ role: "assistant", content: assistant.content });
+      convo.push(assistant);
 
       const toolCalls = assistant.tool_calls ?? [];
       if (!toolCalls.length) {
