@@ -15,7 +15,7 @@ Medichat is an open-source AI health assistant that provides:
 - ICD-10 and medical code lookup — Support for medical coding, billing accuracy, claims management and interoperability standards
 - General medical knowledge — Access clear, understandable health information
 
-Available now at: https://medichat.kyralhealth.com
+Available now at: https://medichat-test.kyralhealth.com
 
 ## Key Capabilities
 
@@ -113,4 +113,4 @@ Open [http://localhost:3000](http://localhost:3000) with your browser.
 
 ## License
 
-[Apache 2.0 License](LICENSE)
+[AGPL 3.0 License](LICENSE)
