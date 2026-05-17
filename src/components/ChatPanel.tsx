@@ -8,6 +8,7 @@ import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { Textarea } from "@/components/ui/Textarea";
+import { useVoice } from "@/hooks/useVoice";
 
 type Mode = "patient" | "physician";
 
@@ -74,6 +75,13 @@ export function ChatPanel({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // sendRef lets useVoice call send() without a stale-closure / circular-dep issue
+  const sendRef = useRef<(text: string) => void>(() => {});
+
+  const voice = useVoice({
+    onTranscript: useCallback((text: string) => sendRef.current(text), []),
+  });
 
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
@@ -229,6 +237,10 @@ export function ChatPanel({
           ...prev,
           { role: "assistant", content: body.message!.content },
         ]);
+        // Auto-play TTS if voice mode is active
+        if (voice.voiceEnabled) {
+          void voice.speak(body.message.content);
+        }
       }
       if (Array.isArray(body.proposedMemories) && body.proposedMemories.length) {
         setProposed((prev) => [...prev, ...body.proposedMemories!]);
@@ -242,7 +254,10 @@ export function ChatPanel({
       setLoading(false);
       router.refresh();
     }
-  }, [input, loading, mode, patientUserId, router, currentThreadId, file, fetchThreads]);
+  }, [input, loading, mode, patientUserId, router, currentThreadId, file, fetchThreads, voice]);
+
+  // Keep sendRef current so useVoice.onTranscript always calls the latest send
+  useEffect(() => { sendRef.current = (text: string) => void send(text); }, [send]);
 
   const acceptMemory = useCallback(async (id: string) => {
     setError(null);
@@ -363,11 +378,31 @@ export function ChatPanel({
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 {currentThreadId ? "History / Switch" : "History"}
             </Button>
-            {currentThreadId && (
-                <Button variant="ghost" size="sm" onClick={startNewChat} className="text-zinc-500">
-                    New Chat
-                </Button>
-            )}
+            <div className="flex items-center gap-1">
+                {/* Voice mode toggle */}
+                <button
+                  type="button"
+                  onClick={voice.toggleVoice}
+                  title={voice.voiceEnabled ? "Voice mode on — click to disable" : "Enable voice mode"}
+                  className={[
+                    "p-1.5 rounded-lg transition-colors",
+                    voice.voiceEnabled
+                      ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                      : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800",
+                  ].join(" ")}
+                >
+                  {/* Speaker icon */}
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M12 6v12m0 0l-3-3m3 3l3-3" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 9H5a1 1 0 00-1 1v4a1 1 0 001 1h4l5 5V4L9 9z" />
+                  </svg>
+                </button>
+                {currentThreadId && (
+                    <Button variant="ghost" size="sm" onClick={startNewChat} className="text-zinc-500">
+                        New Chat
+                    </Button>
+                )}
+            </div>
         </div>
 
         {/* Messages */}
@@ -513,6 +548,32 @@ export function ChatPanel({
                     <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 mb-0.5" title="Attach document (PDF/TXT)">
                         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                     </button>
+
+                    {/* Mic button — only shown when voice mode is enabled */}
+                    {voice.voiceEnabled && (
+                      <button
+                        type="button"
+                        disabled={loading || voice.status === "transcribing"}
+                        onClick={voice.status === "recording" ? voice.stopRecording : voice.startRecording}
+                        title={voice.status === "recording" ? "Stop recording" : "Start recording"}
+                        className={[
+                          "relative p-2 rounded-lg transition-colors mb-0.5",
+                          voice.status === "recording"
+                            ? "text-red-500 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50"
+                            : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800",
+                          (loading || voice.status === "transcribing") ? "opacity-40 cursor-not-allowed" : "",
+                        ].join(" ")}
+                      >
+                        {/* Pulsing red ring while recording */}
+                        {voice.status === "recording" && (
+                          <span className="absolute inset-0 rounded-lg animate-ping bg-red-400 opacity-30" />
+                        )}
+                        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8" />
+                        </svg>
+                      </button>
+                    )}
                     
                     <Textarea
                         ref={textareaRef}
@@ -529,6 +590,15 @@ export function ChatPanel({
                     </Button>
                 </div>
             </div>
+            {/* Voice error (shown below input, separately from chat errors) */}
+            {voice.error && (
+              <div className="flex justify-center">
+                <div className="rounded-full bg-amber-100 dark:bg-amber-900/30 px-4 py-2 text-sm text-amber-700 dark:text-amber-400 flex items-center gap-2">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                  <span>{voice.error}</span>
+                </div>
+              </div>
+            )}
             <div className="text-center">
                 <span className="text-[10px] text-zinc-400 dark:text-zinc-600">MediChat can make mistakes. Please verify important information.</span>
             </div>
