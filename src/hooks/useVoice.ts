@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type VoiceStatus = "idle" | "recording" | "transcribing" | "speaking";
 
@@ -16,12 +16,16 @@ interface UseVoiceResult {
   startRecording: () => void;
   stopRecording: () => void;
   speak: (text: string) => Promise<void>;
+  speakStream: (sentence: string) => void;
+  stopSpeaking: () => void;
   error: string | null;
 }
 
 /** Strips common markdown syntax so TTS doesn't literally say "asterisk". */
 function stripMarkdown(md: string): string {
   return md
+    // Drop References / Key Studies section and everything after it
+    .replace(/\n#+\s*(References|Key Studies)\b[\s\S]*/i, "")
     .replace(/```[\s\S]*?```/g, "") // fenced code blocks
     .replace(/`[^`]*`/g, "")        // inline code
     .replace(/!\[.*?\]\(.*?\)/g, "") // images
@@ -42,11 +46,48 @@ export function useVoice({ onTranscript }: UseVoiceOptions): UseVoiceResult {
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Web Audio API — single context reused across all sentences
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
+
+  // Sentence queue for streaming TTS
+  const sentenceQueueRef = useRef<string[]>([]);
+  const isPlayingQueueRef = useRef(false);
+  const stoppedRef = useRef(false);
 
   const toggleVoice = useCallback(() => {
-    setVoiceEnabled((v) => !v);
+    setVoiceEnabled((v) => {
+      const next = !v;
+      if (next && !audioCtxRef.current) {
+        // Create AudioContext on the first user gesture that enables voice.
+        // This unlocks audio playback for all subsequent sentences.
+        try {
+          audioCtxRef.current = new (
+            window.AudioContext ??
+            (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+          )();
+        } catch {
+          // AudioContext not supported — fall back gracefully
+        }
+      }
+      return next;
+    });
     setError(null);
+  }, []);
+
+  // Close AudioContext on unmount to avoid hitting the browser's instance limit
+  useEffect(() => {
+    return () => {
+      if (activeSourceRef.current) {
+        try { activeSourceRef.current.stop(); } catch { /* already stopped */ }
+        activeSourceRef.current = null;
+      }
+      if (audioCtxRef.current) {
+        void audioCtxRef.current.close();
+        audioCtxRef.current = null;
+      }
+    };
   }, []);
 
   const startRecording = useCallback(async () => {
@@ -124,35 +165,41 @@ export function useVoice({ onTranscript }: UseVoiceOptions): UseVoiceResult {
     }
   }, [status]);
 
-  // Holds the resolve fn of the active playback promise so interruption can settle it.
-  const playbackResolveRef = useRef<(() => void) | null>(null);
-
-  const speak = useCallback(async (text: string): Promise<void> => {
-    // Interrupt any in-progress playback: settle its promise, revoke its URL, stop audio.
-    if (currentAudioRef.current) {
-      const prev = currentAudioRef.current;
-      URL.revokeObjectURL(prev.src);
-      prev.pause();
-      currentAudioRef.current = null;
+  /** Stops the active Web Audio source node and resets playback state. */
+  const stopCurrentAudio = useCallback(() => {
+    if (activeSourceRef.current) {
+      try { activeSourceRef.current.stop(); } catch { /* already stopped */ }
+      activeSourceRef.current = null;
     }
-    if (playbackResolveRef.current) {
-      playbackResolveRef.current();
-      playbackResolveRef.current = null;
-    }
+  }, []);
 
+  /** Drain the queue and stop any active playback immediately. */
+  const stopSpeaking = useCallback(() => {
+    stoppedRef.current = true;
+    sentenceQueueRef.current = [];
+    isPlayingQueueRef.current = false;
+    stopCurrentAudio();
+    setStatus("idle");
+  }, [stopCurrentAudio]);
+
+  /**
+   * Fetches TTS audio for `text`, fully decodes it, then plays it via
+   * Web Audio API. Returns once playback ends (or is interrupted).
+   *
+   * Using Web Audio API instead of HTML5 <audio> avoids two problems:
+   *  1. Silent skips — AudioContext stays unlocked; no autoplay rejections.
+   *  2. Soft first words — audio is fully decoded before the first sample
+   *     hits hardware, so playback starts at full amplitude.
+   */
+  const playSentence = useCallback(async (text: string): Promise<void> => {
     const clean = stripMarkdown(text);
     if (!clean) return;
-
-    // Truncate to avoid very long TTS on slow CPU inference
-    const truncated = clean.length > 500 ? clean.slice(0, 500) + "…" : clean;
-
-    setError(null);
 
     try {
       const res = await fetch("/api/voice/speak", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: truncated }),
+        body: JSON.stringify({ text: clean }),
       });
 
       if (!res.ok) {
@@ -160,30 +207,92 @@ export function useVoice({ onTranscript }: UseVoiceOptions): UseVoiceResult {
         throw new Error(data.error ?? "TTS failed");
       }
 
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      currentAudioRef.current = audio;
+      // Check stop flag after async fetch — avoid playing a cancelled sentence
+      if (stoppedRef.current) return;
 
-      setStatus("speaking");
+      const arrayBuffer = await res.arrayBuffer();
+      if (stoppedRef.current) return;
+
+      // Ensure AudioContext exists and is running
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (
+          window.AudioContext ??
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+        )();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") await ctx.resume();
+      if (stoppedRef.current) return;
+
+      // Fully decode before playing — eliminates the soft-start ramp
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      if (stoppedRef.current) return;
+
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      activeSourceRef.current = source;
 
       await new Promise<void>((resolve) => {
-        playbackResolveRef.current = resolve;
-        audio.onended = () => { playbackResolveRef.current = null; resolve(); };
-        audio.onerror = () => { playbackResolveRef.current = null; resolve(); };
-        audio.play().catch(() => { playbackResolveRef.current = null; resolve(); });
+        source.onended = () => { activeSourceRef.current = null; resolve(); };
+        source.start(0);
       });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Playback failed");
-    } finally {
-      if (currentAudioRef.current) {
-        URL.revokeObjectURL(currentAudioRef.current.src);
-        currentAudioRef.current = null;
-      }
-      playbackResolveRef.current = null;
-      setStatus("idle");
+    } catch {
+      // Non-fatal — TTS errors don't break chat
     }
   }, []);
+
+  /**
+   * Drains the sentence queue sequentially.
+   * Exits early if `stoppedRef` is set.
+   */
+  const drainQueue = useCallback(async () => {
+    if (isPlayingQueueRef.current) return;
+    isPlayingQueueRef.current = true;
+    setStatus("speaking");
+
+    while (sentenceQueueRef.current.length > 0 && !stoppedRef.current) {
+      const sentence = sentenceQueueRef.current.shift()!;
+      await playSentence(sentence);
+    }
+
+    isPlayingQueueRef.current = false;
+    if (!stoppedRef.current) setStatus("idle");
+  }, [playSentence]);
+
+  /**
+   * Enqueues a sentence for sequential TTS playback.
+   * Starts draining the queue if not already playing.
+   * Called with each sentence as streaming text arrives.
+   */
+  const speakStream = useCallback((sentence: string) => {
+    const clean = stripMarkdown(sentence);
+    if (!clean) return;
+    stoppedRef.current = false;
+    sentenceQueueRef.current.push(clean);
+    void drainQueue();
+  }, [drainQueue]);
+
+  /**
+   * Speaks a full text string (used for non-streaming contexts or replays).
+   * Splits into sentences and queues them.
+   */
+  const speak = useCallback(async (text: string): Promise<void> => {
+    stopSpeaking(); // interrupt any active playback
+    const clean = stripMarkdown(text);
+    if (!clean) return;
+
+    // Truncate to avoid very long TTS on slow CPU inference
+    const truncated = clean.length > 500 ? clean.slice(0, 500) + "…" : clean;
+    setError(null);
+    stoppedRef.current = false;
+
+    // Split into sentences and queue them
+    const sentences = truncated.split(/(?<=[.!?])\s+/).filter(Boolean);
+    for (const s of sentences) sentenceQueueRef.current.push(s);
+
+    await drainQueue();
+  }, [stopSpeaking, drainQueue]);
 
   return {
     voiceEnabled,
@@ -192,6 +301,8 @@ export function useVoice({ onTranscript }: UseVoiceOptions): UseVoiceResult {
     startRecording,
     stopRecording,
     speak,
+    speakStream,
+    stopSpeaking,
     error,
   };
 }

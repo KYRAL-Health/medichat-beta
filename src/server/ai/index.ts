@@ -1,5 +1,6 @@
-import { chatCompletion as providerChatCompletion } from "./provider";
-import { ChatCompletionRequest, ChatCompletionResponse } from "./types";
+import { chatCompletion as providerChatCompletion, chatCompletionStream as providerChatCompletionStream } from "./provider";
+import { ChatCompletionRequest, ChatCompletionResponse, ChatCompletionChunk } from "./types";
+import type { Stream } from "openai/streaming";
 
 export * from "./types";
 
@@ -17,4 +18,8 @@ export function getDashboardModel() {
 
 export async function chatCompletion(req: ChatCompletionRequest): Promise<ChatCompletionResponse> {
   return providerChatCompletion(req);
+}
+
+export async function chatCompletionStream(req: ChatCompletionRequest): Promise<Stream<ChatCompletionChunk>> {
+  return providerChatCompletionStream(req);
 }
