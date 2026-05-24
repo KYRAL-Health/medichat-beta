@@ -6,10 +6,12 @@ import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
 import {
   chatCompletion,
+  chatCompletionStream,
   getChatModel,
   getExtractModel,
   type AiTool,
   type ChatMessage,
+  type ToolCall,
 } from "@/server/ai";
 import { proposeMemory, retrieveMemories } from "@/server/ai/tools";
 import { proposePatientRecordSuggestion } from "@/server/ai/patientTools";
@@ -422,47 +424,11 @@ export async function POST(req: NextRequest) {
         summaryText: string;
     }> = [];
 
-    // Tool loop (max 3 iterations)
-    for (let i = 0; i < 3; i++) {
-      const resp = await chatCompletion({
-        model: getChatModel(),
-        messages: convo,
-        tools,
-        tool_choice: "auto",
-        temperature: 0.4,
-      });
-
-      // Record usage for this model call (tokens). Keep logs if user deleted: userId is nullable and set-null on user deletion.
-      try {
-        const tokens = (resp as any)?.usage?.total_tokens ?? 0;
-        await db.insert(usageLogs).values({
-          userId: userId ?? null,
-          kind: "chat",
-          threadId: threadId ?? null,
-          messageId: userMsg?.id ?? null,
-          tokens,
-          meta: { model: getChatModel(), usage: (resp as any)?.usage ?? null },
-        });
-      } catch (e) {
-        console.error("usage log failed", e);
-      }
-
-      const choice = resp.choices[0];
-      const assistant = choice?.message;
-      if (!assistant) {
-        return NextResponse.json(
-          { error: "MODEL_NO_RESPONSE" },
-          { status: 502 }
-        );
-      }
-
-      convo.push(assistant);
-
-      const toolCalls = assistant.tool_calls ?? [];
-      if (!toolCalls.length) {
-        break;
-      }
-
+    /**
+     * Executes tool calls from the model and pushes results back onto `convo`.
+     * Returns true if at least one tool was handled.
+     */
+    async function handleToolCalls(toolCalls: ToolCall[]): Promise<void> {
       for (const call of toolCalls) {
         if (call.type !== "function") continue;
         if (call.function.name === "retrieveMemories") {
@@ -521,13 +487,9 @@ export async function POST(req: NextRequest) {
                 });
                 continue;
             }
-            
-            // Check access again just to be safe, though context limited IDs usually.
-            // But here the model can call with ANY ID. So we must verify access.
             const doc = await db.query.documents.findFirst({
                 where: eq(documents.id, args.documentId)
             });
-            
             if (!doc || doc.patientUserId !== patientUserId) {
                  convo.push({
                     role: "tool",
@@ -536,12 +498,11 @@ export async function POST(req: NextRequest) {
                 });
                 continue;
             }
-
             const data = await getDocumentInsightsData(args.documentId);
             convo.push({
                 role: "tool",
                 tool_call_id: call.id,
-                content: JSON.stringify({ 
+                content: JSON.stringify({
                     filename: data?.document.originalFileName,
                     extracted: data?.extraction?.extractedJson,
                     ingested: data?.created
@@ -553,7 +514,6 @@ export async function POST(req: NextRequest) {
                 summaryText: string;
                 payloadJson: Record<string, unknown>;
             }>(call.function.arguments);
-
             if (!args?.kind || !args.summaryText || !args.payloadJson) {
                 convo.push({
                     role: "tool",
@@ -562,14 +522,13 @@ export async function POST(req: NextRequest) {
                 });
                 continue;
             }
-
             try {
                 const suggestion = await proposePatientRecordSuggestion({
-                    patientUserId,
+                    patientUserId: patientUserId!,
                     kind: args.kind,
                     summaryText: args.summaryText,
                     payloadJson: args.payloadJson,
-                    sourceThreadId: threadId,
+                    sourceThreadId: threadId!,
                     sourceMessageId: userMsg?.id ?? null,
                 });
                 proposedSuggestions.push({
@@ -582,7 +541,7 @@ export async function POST(req: NextRequest) {
                     tool_call_id: call.id,
                     content: JSON.stringify({ ok: true, suggestionId: suggestion.id }),
                 });
-            } catch (e) {
+            } catch {
                 convo.push({
                     role: "tool",
                     tool_call_id: call.id,
@@ -599,50 +558,167 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Find the last assistant message with valid string content
-    const assistantMessage = convo
-      .slice()
-      .reverse()
-      .find(
-        (m) =>
-          m.role === "assistant" &&
-          typeof m.content === "string" &&
-          m.content.trim()
-      );
+    // --- SSE streaming response ---
+    // We run the tool loop with streaming per-iteration.
+    // Tool-call iterations: accumulate chunks synchronously, then run tools.
+    // Final text iteration: forward content chunks to the client via SSE, then
+    // persist the assembled message after the stream closes.
 
-    const assistantContent =
-      typeof assistantMessage?.content === "string"
-        ? assistantMessage.content
-        : null;
+    const encoder = new TextEncoder();
 
-    const assistantText =
-      assistantContent?.trim() ||
-      "I'm not sure I understood—could you rephrase?";
+    function sseEvent(data: Record<string, unknown>): Uint8Array {
+      return encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
+    }
 
-    console.log(assistantText)
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          let assistantText = "";
 
-    const savedAssistant = await db
-      .insert(chatMessages)
-      .values({
-        threadId,
-        senderRole: "assistant",
-        content: assistantText,
-      })
-      .returning()
-      .then((rows) => rows[0]);
+          // Tool loop — max 3 iterations
+          for (let i = 0; i < 3; i++) {
+            const streamResp = await chatCompletionStream({
+              model: getChatModel(),
+              messages: convo,
+              tools,
+              tool_choice: "auto",
+              temperature: 0.4,
+            });
 
-    // Update thread timestamp
-    await db
-      .update(chatThreads)
-      .set({ updatedAt: new Date() })
-      .where(eq(chatThreads.id, threadId));
+            // Accumulate tool call fragments and detect whether this is a
+            // text response (which we stream) or a tool-call response (which we buffer).
+            const pendingToolCalls: Array<{
+              index: number;
+              id: string;
+              name: string;
+              arguments: string;
+            }> = [];
 
-    return NextResponse.json({
-      ok: true,
-      threadId,
-      message: savedAssistant,
-      proposedMemories,
-      proposedSuggestions,
+            let isToolCallResponse = false;
+            let iterationContent = "";
+            let totalTokens = 0;
+
+            for await (const chunk of streamResp) {
+              const delta = chunk.choices[0]?.delta;
+              const finishReason = chunk.choices[0]?.finish_reason;
+              const usage = (chunk as any).usage;
+              if (usage?.total_tokens) totalTokens = usage.total_tokens;
+
+              if (delta?.tool_calls) {
+                isToolCallResponse = true;
+                for (const partial of delta.tool_calls) {
+                  const idx = partial.index;
+                  if (!pendingToolCalls[idx]) {
+                    pendingToolCalls[idx] = {
+                      index: idx,
+                      id: partial.id ?? "",
+                      name: partial.function?.name ?? "",
+                      arguments: "",
+                    };
+                  }
+                  if (partial.id) pendingToolCalls[idx].id = partial.id;
+                  if (partial.function?.name) pendingToolCalls[idx].name = partial.function.name;
+                  if (partial.function?.arguments) {
+                    pendingToolCalls[idx].arguments += partial.function.arguments;
+                  }
+                }
+              }
+
+              if (delta?.content && !isToolCallResponse) {
+                iterationContent += delta.content;
+                controller.enqueue(sseEvent({ type: "chunk", text: delta.content }));
+              }
+
+              if (finishReason === "stop" || finishReason === "length") {
+                // This was the final text response
+                assistantText = iterationContent || "I'm not sure I understood—could you rephrase?";
+                // Push assistant message to convo for record-keeping
+                convo.push({ role: "assistant", content: assistantText });
+                break;
+              }
+            }
+
+            // Record usage
+            try {
+              await db.insert(usageLogs).values({
+                userId: userId ?? null,
+                kind: "chat",
+                threadId: threadId ?? null,
+                messageId: userMsg?.id ?? null,
+                tokens: totalTokens,
+                meta: { model: getChatModel() },
+              });
+            } catch (e) {
+              console.error("usage log failed", e);
+            }
+
+            if (!isToolCallResponse) {
+              // Text was streamed — exit tool loop
+              break;
+            }
+
+            // Build ToolCall objects for the handler
+            const toolCallObjects: ToolCall[] = pendingToolCalls
+              .filter(Boolean)
+              .map((tc) => ({
+                id: tc.id,
+                type: "function" as const,
+                function: { name: tc.name, arguments: tc.arguments },
+              }));
+
+            // Push assistant tool-call message to convo
+            convo.push({
+              role: "assistant",
+              content: null,
+              tool_calls: toolCallObjects,
+            });
+
+            await handleToolCalls(toolCallObjects);
+          }
+
+          // Persist assistant message
+          const savedAssistant = await db
+            .insert(chatMessages)
+            .values({
+              threadId,
+              senderRole: "assistant",
+              content: assistantText,
+            })
+            .returning()
+            .then((rows) => rows[0]);
+
+          await db
+            .update(chatThreads)
+            .set({ updatedAt: new Date() })
+            .where(eq(chatThreads.id, threadId));
+
+          // Send terminal done event
+          controller.enqueue(
+            sseEvent({
+              type: "done",
+              threadId,
+              message: savedAssistant,
+              proposedMemories,
+              proposedSuggestions,
+            })
+          );
+        } catch (err) {
+          console.error("/api/chat stream error", err);
+          controller.enqueue(
+            sseEvent({ type: "error", error: err instanceof Error ? err.message : "Stream error" })
+          );
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
+      },
     });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHENTICATED") {

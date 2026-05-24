@@ -1,5 +1,6 @@
 import OpenAI from "openai";
-import { ChatCompletionRequest, ChatCompletionResponse } from "./types";
+import type { Stream } from "openai/streaming";
+import { ChatCompletionRequest, ChatCompletionResponse, ChatCompletionChunk } from "./types";
 
 interface ProviderConfig {
   baseURL: string;
@@ -13,10 +14,9 @@ function getProviderConfig(): ProviderConfig {
   };
 }
 
-export async function chatCompletion(req: ChatCompletionRequest): Promise<ChatCompletionResponse> {
+function buildClient(): OpenAI {
   const { baseURL, apiKey } = getProviderConfig();
-
-  const openai = new OpenAI({
+  return new OpenAI({
     baseURL,
     apiKey,
     defaultHeaders: {
@@ -24,6 +24,14 @@ export async function chatCompletion(req: ChatCompletionRequest): Promise<ChatCo
       "X-Title": "MediChat Beta",
     },
   });
+}
 
-  return await openai.chat.completions.create(req);
+export async function chatCompletion(req: ChatCompletionRequest): Promise<ChatCompletionResponse> {
+  return await buildClient().chat.completions.create(req);
+}
+
+export async function chatCompletionStream(
+  req: ChatCompletionRequest
+): Promise<Stream<ChatCompletionChunk>> {
+  return buildClient().chat.completions.create({ ...req, stream: true });
 }

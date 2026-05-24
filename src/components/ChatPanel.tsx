@@ -173,6 +173,9 @@ export function ChatPanel({
 
     setMessages((prev) => [...prev, { role: "user", content: userContent }]);
 
+    // Placeholder for the streaming assistant message
+    const streamingIndex = { current: -1 };
+
     try {
       const documentIds: string[] = [];
 
@@ -199,7 +202,7 @@ export function ChatPanel({
         }
       }
 
-      // 2. Send Chat
+      // 2. Send Chat (SSE stream)
       const payload: Record<string, unknown> = {
         mode,
         message: text || (tempFile ? "Uploaded a document." : ""),
@@ -214,41 +217,100 @@ export function ChatPanel({
         body: JSON.stringify(payload),
       });
 
-      const body = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        error?: string;
-        threadId?: string;
-        message?: { content: string };
-        proposedMemories?: ProposedMemory[];
-        proposedSuggestions?: ProposedSuggestion[];
-      };
-
-      if (!res.ok) {
+      if (!res.ok || !res.body) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error || `Chat failed (${res.status})`);
       }
 
-      if (body.threadId && body.threadId !== currentThreadId) {
-          setCurrentThreadId(body.threadId);
-          fetchThreads(); // Refresh list to show new chat
-      }
+      // Insert streaming placeholder message
+      setMessages((prev) => {
+        streamingIndex.current = prev.length;
+        return [...prev, { role: "assistant", content: "" }];
+      });
 
-      if (body.message?.content) {
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: body.message!.content },
-        ]);
-        // Auto-play TTS if voice mode is active
-        if (voice.voiceEnabled) {
-          void voice.speak(body.message.content);
+      // Sentence buffer for TTS: as text streams in, flush complete sentences
+      let sentenceBuffer = "";
+
+      const flushSentences = (final = false) => {
+        if (!voice.voiceEnabled) return;
+        // Split on sentence-end punctuation OR on any newline so list items
+        // and colon-headed lines each become their own TTS chunk.
+        const parts = sentenceBuffer.split(/(?<=[.!?])\s+|\n+/);
+        // If not final, keep the last segment (might be incomplete sentence)
+        const toSpeak = final ? parts : parts.slice(0, -1);
+        sentenceBuffer = final ? "" : (parts[parts.length - 1] ?? "");
+        for (const sentence of toSpeak) {
+          const trimmed = sentence.trim();
+          if (trimmed) voice.speakStream(trimmed);
+        }
+      };
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let sseBuffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        sseBuffer += decoder.decode(value, { stream: true });
+
+        const lines = sseBuffer.split("\n");
+        sseBuffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
+
+          let event: Record<string, unknown>;
+          try { event = JSON.parse(raw); } catch { continue; }
+
+          if (event.type === "chunk" && typeof event.text === "string") {
+            setMessages((prev) => {
+              const updated = [...prev];
+              const idx = streamingIndex.current;
+              if (idx >= 0 && updated[idx]) {
+                updated[idx] = {
+                  role: "assistant",
+                  content: updated[idx].content + event.text,
+                };
+              }
+              return updated;
+            });
+            sentenceBuffer += event.text as string;
+            flushSentences(false);
+          } else if (event.type === "done") {
+            flushSentences(true);
+            const body = event as {
+              threadId?: string;
+              message?: { content: string };
+              proposedMemories?: ProposedMemory[];
+              proposedSuggestions?: ProposedSuggestion[];
+            };
+            if (body.threadId && body.threadId !== currentThreadId) {
+              setCurrentThreadId(body.threadId);
+              fetchThreads();
+            }
+            if (Array.isArray(body.proposedMemories) && body.proposedMemories.length) {
+              setProposed((prev) => [...prev, ...body.proposedMemories!]);
+            }
+            if (Array.isArray(body.proposedSuggestions) && body.proposedSuggestions.length) {
+              setSuggestions((prev) => [...prev, ...body.proposedSuggestions!]);
+            }
+          } else if (event.type === "error") {
+            throw new Error(typeof event.error === "string" ? event.error : "Stream error");
+          }
         }
       }
-      if (Array.isArray(body.proposedMemories) && body.proposedMemories.length) {
-        setProposed((prev) => [...prev, ...body.proposedMemories!]);
-      }
-      if (Array.isArray(body.proposedSuggestions) && body.proposedSuggestions.length) {
-        setSuggestions((prev) => [...prev, ...body.proposedSuggestions!]);
-      }
     } catch (e) {
+      // Remove the empty streaming placeholder if present
+      setMessages((prev) => {
+        const idx = streamingIndex.current;
+        if (idx >= 0 && prev[idx]?.content === "") {
+          return prev.filter((_, i) => i !== idx);
+        }
+        return prev;
+      });
       setError(e instanceof Error ? e.message : "Chat failed");
     } finally {
       setLoading(false);
@@ -397,6 +459,19 @@ export function ChatPanel({
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 9H5a1 1 0 00-1 1v4a1 1 0 001 1h4l5 5V4L9 9z" />
                   </svg>
                 </button>
+                {/* Stop speaking button — shown while TTS is active */}
+                {voice.status === "speaking" && (
+                  <button
+                    type="button"
+                    onClick={voice.stopSpeaking}
+                    title="Stop playback"
+                    className="p-1.5 rounded-lg transition-colors text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                      <rect x="5" y="5" width="14" height="14" rx="2" />
+                    </svg>
+                  </button>
+                )}
                 {currentThreadId && (
                     <Button variant="ghost" size="sm" onClick={startNewChat} className="text-zinc-500">
                         New Chat
