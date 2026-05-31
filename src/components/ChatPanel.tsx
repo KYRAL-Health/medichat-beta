@@ -207,6 +207,7 @@ export function ChatPanel({
         mode,
         message: text || (tempFile ? "Uploaded a document." : ""),
         documentIds: documentIds.length ? documentIds : undefined,
+        voice: voice.voiceEnabled,
       };
       if (patientUserId) payload.patientUserId = patientUserId;
       if (currentThreadId) payload.threadId = currentThreadId;
@@ -228,23 +229,8 @@ export function ChatPanel({
         return [...prev, { role: "assistant", content: "" }];
       });
 
-      // Sentence buffer for TTS: as text streams in, flush complete sentences
-      let sentenceBuffer = "";
-
-      const flushSentences = (final = false) => {
-        if (!voice.voiceEnabled) return;
-        // Split on sentence-end punctuation OR on any newline so list items
-        // and colon-headed lines each become their own TTS chunk.
-        const parts = sentenceBuffer.split(/(?<=[.!?])\s+|\n+/);
-        // If not final, keep the last segment (might be incomplete sentence)
-        const toSpeak = final ? parts : parts.slice(0, -1);
-        sentenceBuffer = final ? "" : (parts[parts.length - 1] ?? "");
-        for (const sentence of toSpeak) {
-          const trimmed = sentence.trim();
-          if (trimmed) voice.speakStream(trimmed);
-        }
-      };
-
+      // The server handles TTS when voice:true — we just need to play back
+      // the audio SSE events as they arrive.
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let sseBuffer = "";
@@ -277,10 +263,9 @@ export function ChatPanel({
               }
               return updated;
             });
-            sentenceBuffer += event.text as string;
-            flushSentences(false);
+          } else if (event.type === "audio" && typeof event.data === "string") {
+            voice.receiveAudioChunk(event.data);
           } else if (event.type === "done") {
-            flushSentences(true);
             const body = event as {
               threadId?: string;
               message?: { content: string };
@@ -316,7 +301,7 @@ export function ChatPanel({
       setLoading(false);
       router.refresh();
     }
-  }, [input, loading, mode, patientUserId, router, currentThreadId, file, fetchThreads, voice]);
+  }, [input, loading, mode, patientUserId, router, currentThreadId, file, fetchThreads, voice.voiceEnabled, voice.receiveAudioChunk]);
 
   // Keep sendRef current so useVoice.onTranscript always calls the latest send
   useEffect(() => { sendRef.current = (text: string) => void send(text); }, [send]);

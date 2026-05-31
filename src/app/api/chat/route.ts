@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { requireAuthenticatedUser } from "@/server/auth/utils";
 import { assertPatientAccess } from "@/server/authz/patientAccess";
+import { ttsSpeak } from "@/server/ai/voice";
 import {
   chatCompletion,
   chatCompletionStream,
@@ -32,7 +33,26 @@ const ChatSchema = z.object({
   threadId: z.string().uuid().optional(),
   message: z.string().min(1).max(8000),
   documentIds: z.array(z.string().uuid()).optional(),
+  /** When true the server runs TTS for each sentence and emits audio SSE events. */
+  voice: z.boolean().optional(),
 });
+
+/** Strips markdown so TTS doesn't read out "asterisk" or code fences. */
+function stripMarkdownForTTS(md: string): string {
+  return md
+    .replace(/\n#+\s*(References|Key Studies)\b[\s\S]*/i, "")
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`[^`]*`/g, "")
+    .replace(/!\[.*?\]\(.*?\)/g, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/#{1,6}\s+/g, "")
+    .replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, "$1")
+    .replace(/^[-*+]\s+/gm, "")
+    .replace(/^\d+\.\s+/gm, "")
+    .replace(/>\s+/g, "")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+}
 
 function safeJsonParse<T>(value: string): T | null {
   try {
@@ -100,7 +120,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { mode, message, documentIds } = parsed.data;
+    const { mode, message, documentIds, voice: includeVoice } = parsed.data;
     const patientUserId =
       mode === "patient" ? userId : parsed.data.patientUserId ?? null;
 
@@ -575,6 +595,67 @@ export async function POST(req: NextRequest) {
         try {
           let assistantText = "";
 
+          // --- Server-side TTS pipeline (only active when voice:true) ---
+          // Sentences are queued as text streams in and processed sequentially.
+          // Each completed sentence's audio is base64-encoded and emitted as an
+          // SSE event so the client can play frames as they arrive, before the
+          // full response is done.
+          let ttsSentenceBuffer = "";
+          const ttsQueue: string[] = [];
+          let ttsDraining = false;
+          let ttsSettleResolve: (() => void) | null = null;
+          let ttsComplete: Promise<void> = Promise.resolve();
+
+          async function drainTTS(): Promise<void> {
+            ttsDraining = true;
+            while (ttsQueue.length > 0) {
+              const sentence = ttsQueue.shift()!;
+              try {
+                const audioStream = await ttsSpeak(sentence);
+                const reader = audioStream.getReader();
+                const chunks: Uint8Array[] = [];
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+                  chunks.push(value);
+                }
+                const total = chunks.reduce((s, c) => s + c.length, 0);
+                if (total > 0) {
+                  const buf = new Uint8Array(total);
+                  let off = 0;
+                  for (const c of chunks) { buf.set(c, off); off += c.length; }
+                  const b64 = Buffer.from(buf).toString("base64");
+                  controller.enqueue(sseEvent({ type: "audio", data: b64 }));
+                }
+              } catch {
+                // TTS failure for this sentence — skip silently
+              }
+            }
+            ttsDraining = false;
+            ttsSettleResolve?.();
+            ttsSettleResolve = null;
+          }
+
+          function scheduleTTS(sentence: string): void {
+            if (!includeVoice) return;
+            const clean = stripMarkdownForTTS(sentence.trim());
+            if (!clean) return;
+            ttsQueue.push(clean);
+            if (!ttsDraining) {
+              ttsComplete = new Promise<void>((resolve) => { ttsSettleResolve = resolve; });
+              void drainTTS();
+            }
+          }
+
+          function flushTTSSentences(final: boolean): void {
+            if (!includeVoice) return;
+            const parts = ttsSentenceBuffer.split(/(?<=[.!?])\s+|\n+/);
+            const toSpeak = final ? parts : parts.slice(0, -1);
+            ttsSentenceBuffer = final ? "" : (parts[parts.length - 1] ?? "");
+            for (const s of toSpeak) scheduleTTS(s);
+          }
+          // -------------------------------------------------------------------
+
           // Tool loop — max 3 iterations
           for (let i = 0; i < 3; i++) {
             const streamResp = await chatCompletionStream({
@@ -627,9 +708,13 @@ export async function POST(req: NextRequest) {
               if (delta?.content && !isToolCallResponse) {
                 iterationContent += delta.content;
                 controller.enqueue(sseEvent({ type: "chunk", text: delta.content }));
+                ttsSentenceBuffer += delta.content;
+                flushTTSSentences(false);
               }
 
               if (finishReason === "stop" || finishReason === "length") {
+                // This was the final text response — flush remaining TTS buffer
+                flushTTSSentences(true);
                 // This was the final text response
                 assistantText = iterationContent || "I'm not sure I understood—could you rephrase?";
                 // Push assistant message to convo for record-keeping
@@ -691,6 +776,9 @@ export async function POST(req: NextRequest) {
             .update(chatThreads)
             .set({ updatedAt: new Date() })
             .where(eq(chatThreads.id, threadId));
+
+          // Wait for all TTS audio events to be emitted before sending done
+          if (includeVoice) await ttsComplete;
 
           // Send terminal done event
           controller.enqueue(
