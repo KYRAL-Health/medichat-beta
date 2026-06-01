@@ -78,9 +78,15 @@ export function ChatPanel({
 
   // sendRef lets useVoice call send() without a stale-closure / circular-dep issue
   const sendRef = useRef<(text: string) => void>(() => {});
+  const abortRef = useRef<AbortController | null>(null);
 
   const voice = useVoice({
     onTranscript: useCallback((text: string) => sendRef.current(text), []),
+    onBargeIn: useCallback(() => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      setLoading(false);
+    }, []),
   });
 
   const scrollToBottom = () => {
@@ -158,6 +164,7 @@ export function ChatPanel({
   const send = useCallback(async (msgText?: string) => {
     const text = (msgText ?? input).trim();
     if ((!text && !file) || loading) return;
+    voice.resetPlayback();
     
     // Optimistic UI updates
     const tempFile = file;
@@ -212,10 +219,14 @@ export function ChatPanel({
       if (patientUserId) payload.patientUserId = patientUserId;
       if (currentThreadId) payload.threadId = currentThreadId;
 
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        signal: abortRef.current.signal,
       });
 
       if (!res.ok || !res.body) {
@@ -296,12 +307,14 @@ export function ChatPanel({
         }
         return prev;
       });
-      setError(e instanceof Error ? e.message : "Chat failed");
+      if ((e as Error).name !== "AbortError") {
+        setError(e instanceof Error ? e.message : "Chat failed");
+      }
     } finally {
       setLoading(false);
       router.refresh();
     }
-  }, [input, loading, mode, patientUserId, router, currentThreadId, file, fetchThreads, voice.voiceEnabled, voice.receiveAudioChunk]);
+  }, [input, loading, mode, patientUserId, router, currentThreadId, file, fetchThreads, voice.voiceEnabled, voice.receiveAudioChunk, voice.resetPlayback]);
 
   // Keep sendRef current so useVoice.onTranscript always calls the latest send
   useEffect(() => { sendRef.current = (text: string) => void send(text); }, [send]);
@@ -614,23 +627,52 @@ export function ChatPanel({
                       <button
                         type="button"
                         disabled={loading || voice.status === "transcribing"}
-                        onClick={voice.status === "recording" ? voice.stopRecording : voice.startRecording}
-                        title={voice.status === "recording" ? "Stop recording" : "Start recording"}
+                        onClick={
+                          voice.conversationMode
+                            ? undefined
+                            : voice.status === "recording"
+                              ? voice.stopRecording
+                              : voice.startRecording
+                        }
+                        title={voice.conversationMode ? "Mic is auto-controlled in conversation mode" : voice.status === "recording" ? "Stop recording" : "Start recording"}
                         className={[
                           "relative p-2 rounded-lg transition-colors mb-0.5",
                           voice.status === "recording"
                             ? "text-red-500 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50"
-                            : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800",
+                            : voice.status === "listening"
+                              ? "text-green-500 bg-green-50 dark:bg-green-900/30"
+                              : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800",
                           (loading || voice.status === "transcribing") ? "opacity-40 cursor-not-allowed" : "",
                         ].join(" ")}
                       >
-                        {/* Pulsing red ring while recording */}
-                        {voice.status === "recording" && (
-                          <span className="absolute inset-0 rounded-lg animate-ping bg-red-400 opacity-30" />
+                        {(voice.status === "recording" || voice.status === "listening") && (
+                          <span className={[
+                            "absolute inset-0 rounded-lg animate-ping opacity-30",
+                            voice.status === "recording" ? "bg-red-400" : "bg-green-400"
+                          ].join(" ")} />
                         )}
                         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
                           <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8" />
+                        </svg>
+                      </button>
+                    )}
+
+                    {/* Conversation mode toggle — next to mic */}
+                    {voice.voiceEnabled && (
+                      <button
+                        type="button"
+                        onClick={voice.toggleConversationMode}
+                        title={voice.conversationMode ? "Conversation mode on — click to disable" : "Enable conversation mode (auto-detect speech)"}
+                        className={[
+                          "p-2 rounded-lg transition-colors mb-0.5",
+                          voice.conversationMode
+                            ? "text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 hover:bg-green-100 dark:hover:bg-green-900/50"
+                            : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800",
+                        ].join(" ")}
+                      >
+                        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                         </svg>
                       </button>
                     )}
