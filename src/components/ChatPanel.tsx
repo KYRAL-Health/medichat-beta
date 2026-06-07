@@ -79,9 +79,14 @@ export function ChatPanel({
   // sendRef lets useVoice call send() without a stale-closure / circular-dep issue
   const sendRef = useRef<(text: string) => void>(() => {});
   const abortRef = useRef<AbortController | null>(null);
+  // Tracks whether the current send() call originated from voice input
+  const voiceInputRef = useRef(false);
 
   const voice = useVoice({
-    onTranscript: useCallback((text: string) => sendRef.current(text), []),
+    onTranscript: useCallback((text: string) => {
+      voiceInputRef.current = true;
+      sendRef.current(text);
+    }, []),
     onBargeIn: useCallback(() => {
       abortRef.current?.abort();
       abortRef.current = null;
@@ -210,11 +215,13 @@ export function ChatPanel({
       }
 
       // 2. Send Chat (SSE stream)
+      const useVoice = voiceInputRef.current;
+      voiceInputRef.current = false;
       const payload: Record<string, unknown> = {
         mode,
         message: text || (tempFile ? "Uploaded a document." : ""),
         documentIds: documentIds.length ? documentIds : undefined,
-        voice: voice.voiceEnabled,
+        voice: useVoice,
       };
       if (patientUserId) payload.patientUserId = patientUserId;
       if (currentThreadId) payload.threadId = currentThreadId;
@@ -314,7 +321,7 @@ export function ChatPanel({
       setLoading(false);
       router.refresh();
     }
-  }, [input, loading, mode, patientUserId, router, currentThreadId, file, fetchThreads, voice.voiceEnabled, voice.receiveAudioChunk, voice.resetPlayback]);
+  }, [input, loading, mode, patientUserId, router, currentThreadId, file, fetchThreads, voice.receiveAudioChunk, voice.resetPlayback]);
 
   // Keep sendRef current so useVoice.onTranscript always calls the latest send
   useEffect(() => { sendRef.current = (text: string) => void send(text); }, [send]);
@@ -385,7 +392,7 @@ export function ChatPanel({
   };
 
   return (
-    <div className="flex h-full gap-4 relative">
+    <div className="flex flex-1 flex-col min-h-0 relative">
       {/* History Sidebar (Overlay or Inline depending on space/state) */}
       {showHistory && (
           <div className="absolute inset-y-0 left-0 w-64 bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800 z-20 flex flex-col shadow-xl">
@@ -431,7 +438,7 @@ export function ChatPanel({
       )}
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col h-full min-w-0">
+      <div className="flex-1 flex flex-col min-h-0 min-w-0">
         {/* Header / Toolbar */}
         <div className="flex items-center justify-between pb-2 shrink-0">
             <Button variant="ghost" size="sm" onClick={() => setShowHistory(!showHistory)} className="gap-2 text-zinc-500">
@@ -439,37 +446,6 @@ export function ChatPanel({
                 {currentThreadId ? "History / Switch" : "History"}
             </Button>
             <div className="flex items-center gap-1">
-                {/* Voice mode toggle */}
-                <button
-                  type="button"
-                  onClick={voice.toggleVoice}
-                  title={voice.voiceEnabled ? "Voice mode on — click to disable" : "Enable voice mode"}
-                  className={[
-                    "p-1.5 rounded-lg transition-colors",
-                    voice.voiceEnabled
-                      ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50"
-                      : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800",
-                  ].join(" ")}
-                >
-                  {/* Speaker icon */}
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M12 6v12m0 0l-3-3m3 3l3-3" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 9H5a1 1 0 00-1 1v4a1 1 0 001 1h4l5 5V4L9 9z" />
-                  </svg>
-                </button>
-                {/* Stop speaking button — shown while TTS is active */}
-                {voice.status === "speaking" && (
-                  <button
-                    type="button"
-                    onClick={voice.stopSpeaking}
-                    title="Stop playback"
-                    className="p-1.5 rounded-lg transition-colors text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400"
-                  >
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
-                      <rect x="5" y="5" width="14" height="14" rx="2" />
-                    </svg>
-                  </button>
-                )}
                 {currentThreadId && (
                     <Button variant="ghost" size="sm" onClick={startNewChat} className="text-zinc-500">
                         New Chat
@@ -616,67 +592,12 @@ export function ChatPanel({
                     </div>
                 )}
 
-                <div className="flex items-end gap-2 w-full">
+                <div className="flex items-end gap-1 w-full">
                     <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} accept=".pdf,.txt,application/pdf,text/plain" />
-                    <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 mb-0.5" title="Attach document (PDF/TXT)">
+                    <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 mb-0.5 shrink-0" title="Attach document (PDF/TXT)">
                         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                     </button>
 
-                    {/* Mic button — only shown when voice mode is enabled */}
-                    {voice.voiceEnabled && (
-                      <button
-                        type="button"
-                        disabled={loading || voice.status === "transcribing"}
-                        onClick={
-                          voice.conversationMode
-                            ? undefined
-                            : voice.status === "recording"
-                              ? voice.stopRecording
-                              : voice.startRecording
-                        }
-                        title={voice.conversationMode ? "Mic is auto-controlled in conversation mode" : voice.status === "recording" ? "Stop recording" : "Start recording"}
-                        className={[
-                          "relative p-2 rounded-lg transition-colors mb-0.5",
-                          voice.status === "recording"
-                            ? "text-red-500 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50"
-                            : voice.status === "listening"
-                              ? "text-green-500 bg-green-50 dark:bg-green-900/30"
-                              : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800",
-                          (loading || voice.status === "transcribing") ? "opacity-40 cursor-not-allowed" : "",
-                        ].join(" ")}
-                      >
-                        {(voice.status === "recording" || voice.status === "listening") && (
-                          <span className={[
-                            "absolute inset-0 rounded-lg animate-ping opacity-30",
-                            voice.status === "recording" ? "bg-red-400" : "bg-green-400"
-                          ].join(" ")} />
-                        )}
-                        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8" />
-                        </svg>
-                      </button>
-                    )}
-
-                    {/* Conversation mode toggle — next to mic */}
-                    {voice.voiceEnabled && (
-                      <button
-                        type="button"
-                        onClick={voice.toggleConversationMode}
-                        title={voice.conversationMode ? "Conversation mode on — click to disable" : "Enable conversation mode (auto-detect speech)"}
-                        className={[
-                          "p-2 rounded-lg transition-colors mb-0.5",
-                          voice.conversationMode
-                            ? "text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 hover:bg-green-100 dark:hover:bg-green-900/50"
-                            : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800",
-                        ].join(" ")}
-                      >
-                        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                        </svg>
-                      </button>
-                    )}
-                    
                     <Textarea
                         ref={textareaRef}
                         value={input}
@@ -686,12 +607,75 @@ export function ChatPanel({
                         className="flex-1 min-h-[44px] max-h-48 bg-transparent border-none focus-visible:ring-0 p-2 text-base resize-none"
                         rows={1}
                     />
-                    
+
+                    {/* Mic button — inline icon between textarea and send, hidden when typing */}
+                    {input.trim() === "" && (
+                    <button
+                      type="button"
+                      disabled={loading || voice.status === "transcribing"}
+                      onClick={
+                        voice.conversationMode
+                          ? undefined
+                          : voice.status === "recording"
+                            ? voice.stopRecording
+                            : voice.startRecording
+                      }
+                      title={voice.conversationMode ? "Mic is auto-controlled in conversation mode" : voice.status === "recording" ? "Stop recording" : "Start recording"}
+                      className={[
+                        "relative p-2 rounded-lg transition-colors mb-0.5 shrink-0",
+                        voice.status === "recording"
+                          ? "text-red-500 bg-red-50 dark:bg-red-900/30"
+                          : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800",
+                        (loading || voice.status === "transcribing") ? "opacity-40 cursor-not-allowed" : "",
+                      ].join(" ")}
+                    >
+                      {(voice.status === "recording" || voice.status === "listening") && (
+                        <span className="absolute inset-0 rounded-lg animate-ping opacity-30 bg-red-400" />
+                      )}
+                      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8" />
+                      </svg>
+                    </button>
+                    )}
+
+                    {/* Conversation mode toggle — inline icon, hidden when typing */}
+                    {input.trim() === "" && (
+                    <button
+                      type="button"
+                      onClick={voice.toggleConversationMode}
+                      title={voice.conversationMode ? "Conversation mode on" : "Enable conversation mode"}
+                      className={[
+                        "p-2 rounded-lg transition-colors mb-0.5 shrink-0",
+                        voice.conversationMode
+                          ? "text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30"
+                          : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800",
+                      ].join(" ")}
+                    >
+                      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                    </button>
+                    )}
+
+                    {/* Stop speaking button — replaces mic/conv when active */}
+                    {voice.status === "speaking" && (
+                      <button
+                        type="button"
+                        onClick={voice.stopSpeaking}
+                        title="Stop playback"
+                        className="p-2 rounded-lg transition-colors mb-0.5 shrink-0 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+                      >
+                        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
+                          <rect x="5" y="5" width="14" height="14" rx="2" />
+                        </svg>
+                      </button>
+                    )}
+
                     <Button onClick={() => void send()} disabled={loading || (!input.trim() && !file)} size="icon" className="mb-0.5 shrink-0 rounded-lg">
                         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" /></svg>
                     </Button>
                 </div>
-            </div>
             {/* Voice error (shown below input, separately from chat errors) */}
             {voice.error && (
               <div className="flex justify-center">
@@ -704,6 +688,7 @@ export function ChatPanel({
             <div className="text-center">
                 <span className="text-[10px] text-zinc-400 dark:text-zinc-600">MediChat can make mistakes. Please verify important information.</span>
             </div>
+        </div>
         </div>
       </div>
     </div>

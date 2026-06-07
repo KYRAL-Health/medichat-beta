@@ -12,8 +12,6 @@ interface UseVoiceOptions {
 }
 
 interface UseVoiceResult {
-  voiceEnabled: boolean;
-  toggleVoice: () => void;
   conversationMode: boolean;
   toggleConversationMode: () => void;
   status: VoiceStatus;
@@ -30,7 +28,6 @@ const SILENCE_DURATION_MS = 1500;
 const POLL_INTERVAL_MS = 100;
 
 export function useVoice({ onTranscript, onBargeIn }: UseVoiceOptions): UseVoiceResult {
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [conversationMode, setConversationMode] = useState(false);
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -61,24 +58,6 @@ export function useVoice({ onTranscript, onBargeIn }: UseVoiceOptions): UseVoice
   onTranscriptRef.current = onTranscript;
   const onBargeInRef = useRef(onBargeIn);
   onBargeInRef.current = onBargeIn;
-
-  const toggleVoice = useCallback(() => {
-    setVoiceEnabled((v) => {
-      const next = !v;
-      if (next && !audioCtxRef.current) {
-        try {
-          audioCtxRef.current = new (
-            window.AudioContext ??
-            (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-          )();
-        } catch {
-          // AudioContext not supported — fall back gracefully
-        }
-      }
-      return next;
-    });
-    setError(null);
-  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -189,8 +168,55 @@ export function useVoice({ onTranscript, onBargeIn }: UseVoiceOptions): UseVoice
         }
       }
     } else if (currentStatus === "speaking" && isSpeaking && stream) {
-      // Barge-in
+      // Barge-in — start recording immediately before stopping playback
+      // so the first words aren't missed
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : MediaRecorder.isTypeSupported("audio/ogg")
+        ? "audio/ogg"
+        : "";
+
+      let recorder: MediaRecorder;
+      try {
+        recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      } catch {
+        return;
+      }
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        chunksRef.current = [];
+
+        setStatus("transcribing");
+        try {
+          const form = new FormData();
+          form.append("audio", blob, "recording.webm");
+          const res = await fetch("/api/voice/transcribe", { method: "POST", body: form });
+          const data = (await res.json()) as { text?: string; error?: string };
+          if (!res.ok) throw new Error(data.error ?? "Transcription failed");
+          if (data.text?.trim()) onTranscriptRef.current(data.text.trim());
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Transcription failed");
+        } finally {
+          if (conversationActiveRef.current) {
+            setStatus("listening");
+          } else {
+            setStatus("idle");
+          }
+        }
+      };
+
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setStatus("recording");
       stoppedRef.current = true;
+
+      // Now stop playback and abort the AI stream
       audioQueueRef.current = [];
       isPlayingRef.current = false;
       if (activeSourceRef.current) {
@@ -199,10 +225,6 @@ export function useVoice({ onTranscript, onBargeIn }: UseVoiceOptions): UseVoice
       }
       onBargeInRef.current?.();
       silenceTimerRef.current = 0;
-      // Update statusRef synchronously — setStatus is async (React state)
-      // but startRecordingWithStream checks statusRef.current immediately
-      statusRef.current = "idle";
-      void startRecordingWithStream(stream);
     } else {
       silenceTimerRef.current = 0;
     }
@@ -214,7 +236,6 @@ export function useVoice({ onTranscript, onBargeIn }: UseVoiceOptions): UseVoice
 
       if (next) {
         // Turning ON
-        setVoiceEnabled(true);
         conversationActiveRef.current = true;
         stoppedRef.current = false;
 
@@ -431,8 +452,6 @@ export function useVoice({ onTranscript, onBargeIn }: UseVoiceOptions): UseVoice
   }, []);
 
   return {
-    voiceEnabled,
-    toggleVoice,
     conversationMode,
     toggleConversationMode,
     status,
