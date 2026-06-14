@@ -297,7 +297,7 @@ async function initializeSession(cfg: InitConfig): Promise<LiveSessionHandle> {
 
   const systemInstruction = mode === "physician" ? physicianSystem : patientSystem;
 
-  const geminiModel = process.env.GEMINI_LIVE_MODEL ?? "gemini-2.0-flash-live-preview-04-09";
+  const geminiModel = process.env.GEMINI_LIVE_MODEL ?? "gemini-3.1-flash-live-preview";
   const geminiVoice = process.env.GEMINI_VOICE ?? "Kore";
 
   const session = await createGeminiLiveSession(
