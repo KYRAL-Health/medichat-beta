@@ -1,7 +1,7 @@
 import type { IncomingMessage } from "http";
 import type { Duplex } from "stream";
 import { WebSocketServer, type WebSocket } from "ws";
-import { randomUUID } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import { parse as parseUrl } from "url";
 
 import { createGeminiLiveSession, type LiveSessionHandle } from "@/server/ai/geminiLiveSession";
@@ -14,27 +14,52 @@ import { db } from "@/server/db";
 import { chatMessages, chatThreads, documents } from "@/server/db/schema";
 import { eq, inArray } from "drizzle-orm";
 
-// ─── Token store for pre-authenticated connections ───
-interface PendingConnection {
+// ─── Stateless HMAC tokens (avoids cross-module Map isolation) ───
+
+const TOKEN_TTL_MS = 120_000; // 2 minutes
+
+function getSecret(): string {
+  return process.env.VOICE_TOKEN_SECRET ?? process.env.CLERK_SECRET_KEY ?? "medichat-voice-dev-secret";
+}
+
+function hmacSign(payload: string): string {
+  return createHmac("sha256", getSecret()).update(payload).digest("hex");
+}
+
+interface TokenPayload {
   userId: string;
   mode: "patient" | "physician";
   patientUserId: string;
-  createdAt: number;
+  exp: number;
 }
 
-const pendingConnections = new Map<string, PendingConnection>();
-const TOKEN_TTL_MS = 30_000; // 30 seconds
-
 /**
- * Called by the /api/voice/live/init route to pre-register a connection token.
- * Returns the token that the client should pass as ?token=... on the WS URL.
+ * Creates a signed, stateless voice connection token.
+ * No shared Map needed — verified purely by signature + expiry.
  */
 export function createVoiceToken(userId: string, mode: "patient" | "physician", patientUserId: string): string {
-  const token = randomUUID();
-  pendingConnections.set(token, { userId, mode, patientUserId, createdAt: Date.now() });
-  // Auto-expire
-  setTimeout(() => pendingConnections.delete(token), TOKEN_TTL_MS);
-  return token;
+  const payload: TokenPayload = { userId, mode, patientUserId, exp: Date.now() + TOKEN_TTL_MS };
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const sig = hmacSign(body);
+  return `${body}.${sig}`;
+}
+
+function verifyVoiceToken(token: string): TokenPayload | null {
+  const dot = token.lastIndexOf(".");
+  if (dot < 0) return null;
+  const body = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const expected = hmacSign(body);
+  // Constant-time comparison
+  if (sig.length !== expected.length) return null;
+  if (!timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+  try {
+    const payload: TokenPayload = JSON.parse(Buffer.from(body, "base64url").toString());
+    if (payload.exp < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
 }
 
 // ─── WebSocket upgrade handler ───
@@ -56,18 +81,15 @@ export function handleVoiceUpgrade(req: IncomingMessage, socket: Duplex, head: B
     return;
   }
 
-  const pending = pendingConnections.get(token);
-  if (!pending) {
+  const auth = verifyVoiceToken(token);
+  if (!auth) {
     socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
     socket.destroy();
     return;
   }
 
-  pendingConnections.delete(token);
-
   wss.handleUpgrade(req, socket, head, (ws) => {
-    // Attach auth info to the ws object for handleConnection
-    (ws as unknown as Record<string, unknown>).__auth = pending;
+    (ws as unknown as Record<string, unknown>).__auth = auth;
     wss!.emit("connection", ws, req);
   });
 }
@@ -75,7 +97,7 @@ export function handleVoiceUpgrade(req: IncomingMessage, socket: Duplex, head: B
 // ─── Connection handler ───
 
 async function handleConnection(ws: WebSocket): Promise<void> {
-  const auth = (ws as unknown as Record<string, unknown>).__auth as PendingConnection | undefined;
+  const auth = (ws as unknown as Record<string, unknown>).__auth as TokenPayload | undefined;
   if (!auth) {
     ws.close(4001, "Unauthorized");
     return;
