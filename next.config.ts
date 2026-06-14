@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  serverExternalPackages: ["pino", "pino-pretty", "thread-stream", "ffmpeg-static", "fluent-ffmpeg"],
+  serverExternalPackages: ["pino", "pino-pretty", "thread-stream"],
 };
 
 export default withSentryConfig(nextConfig, {

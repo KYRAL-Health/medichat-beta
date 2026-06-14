@@ -1,13 +1,8 @@
 /**
- * Server-side helpers for STT (Gemini Live API) and TTS (Gemini TTS API).
+ * Server-side helpers for STT (Gemini multimodal API) and TTS (Gemini TTS API).
  */
 
 import { GoogleGenAI, Modality } from "@google/genai";
-import ffmpeg from "fluent-ffmpeg";
-import ffmpegStatic from "ffmpeg-static";
-import { PassThrough, Readable } from "stream";
-
-ffmpeg.setFfmpegPath(ffmpegStatic ?? "ffmpeg");
 
 function getGeminiApiKey(): string {
   const key = process.env.GEMINI_API_KEY;
@@ -23,49 +18,6 @@ function getGeminiVoice(): string {
 
 function buildGenAI(): GoogleGenAI {
   return new GoogleGenAI({ apiKey: getGeminiApiKey() });
-}
-
-// ─── Audio conversion: webm/ogg/mp4 → PCM 16kHz mono ───
-
-function convertToPcm16kHz(inputBuffer: Buffer, mimeType: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const inputFormat = mimeType.includes("webm")
-      ? "webm"
-      : mimeType.includes("ogg")
-      ? "ogg"
-      : mimeType.includes("mp4") || mimeType.includes("m4a")
-      ? "mp4"
-      : undefined;
-
-    const inputStream = new Readable();
-    inputStream.push(inputBuffer);
-    inputStream.push(null);
-
-    const outStream = new PassThrough();
-    const chunks: Buffer[] = [];
-
-    outStream.on("data", (chunk: Buffer) => chunks.push(chunk));
-    outStream.on("error", (err) => reject(err));
-
-    const cmd = ffmpeg()
-      .input(inputStream)
-      .audioFrequency(16000)
-      .audioChannels(1)
-      .audioCodec("pcm_s16le")
-      .format("s16le")
-      .on("error", (err) => {
-        reject(new Error(`ffmpeg conversion failed: ${err.message}`));
-      })
-      .on("end", () => {
-        resolve(Buffer.concat(chunks));
-      });
-
-    if (inputFormat) {
-      cmd.inputFormat(inputFormat);
-    }
-
-    cmd.pipe(outStream, { end: true });
-  });
 }
 
 // ─── WAV header writer ───
@@ -98,10 +50,11 @@ function pcmToWav(pcmBuffer: Buffer, sampleRate: number): Buffer {
   return Buffer.concat([header, pcmBuffer]);
 }
 
-// ─── STT via Gemini Live API ───
+// ─── STT via Gemini REST API ───
 
 /**
- * Transcribes audio to text via Gemini Live API.
+ * Transcribes audio to text via Gemini multimodal API.
+ * Sends the audio as inline data with a transcription prompt.
  * @param audioBuffer  Raw audio bytes (webm / ogg / mp4).
  * @param mimeType     MIME type of the audio, e.g. "audio/webm".
  * @returns            Transcribed text string.
@@ -110,75 +63,28 @@ export async function sttTranscribe(
   audioBuffer: Buffer,
   mimeType: string
 ): Promise<string> {
-  const pcmBuffer = await convertToPcm16kHz(audioBuffer, mimeType);
   const ai = buildGenAI();
+  const model = "gemini-2.5-flash";
 
-  const model = "gemini-3.1-flash-live-preview";
-  const config = {
-    responseModalities: [Modality.TEXT],
-    inputAudioTranscription: {},
-  };
-
-  const messageQueue: Array<{ serverContent?: { inputTranscription?: { text?: string }; turnComplete?: boolean } }> = [];
-
-  return new Promise<string>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(new Error("STT timeout: no transcription received within 30s"));
-    }, 30000);
-
-    function handleMessage(
-      msg: { serverContent?: { inputTranscription?: { text?: string }; turnComplete?: boolean } }
-    ) {
-      const transcription = msg.serverContent?.inputTranscription?.text;
-      if (transcription != null) {
-        clearTimeout(timeout);
-        resolve(transcription);
-        return;
-      }
-      if (msg.serverContent?.turnComplete) {
-        clearTimeout(timeout);
-        resolve("");
-      }
-    }
-
-    void ai.live.connect({
-      model,
-      callbacks: {
-        onopen: () => {
-          /* no-op — send happens after session resolves */
-        },
-        onmessage: (msg) => {
-          messageQueue.push(msg);
-          handleMessage(msg);
-        },
-        onerror: (e) => {
-          clearTimeout(timeout);
-          reject(new Error(`Gemini Live API error: ${e.message}`));
-        },
-        onclose: () => {
-          clearTimeout(timeout);
-          // Resolve with empty if we get here without a transcription
-          resolve("");
-        },
+  const response = await ai.models.generateContent({
+    model,
+    contents: [
+      {
+        parts: [
+          {
+            inlineData: {
+              data: audioBuffer.toString("base64"),
+              mimeType,
+            },
+          },
+          { text: "Transcribe this audio exactly as spoken. Return ONLY the transcribed text, nothing else." },
+        ],
       },
-      config,
-    }).then((session) => {
-      // Send the PCM audio chunk
-      const base64Audio = pcmBuffer.toString("base64");
-      session.sendRealtimeInput({
-        audio: { data: base64Audio, mimeType: "audio/pcm;rate=16000" },
-      });
-      // Signal end of audio stream
-      session.sendRealtimeInput({ audioStreamEnd: true });
-    }).catch((err) => {
-      clearTimeout(timeout);
-      reject(
-        new Error(
-          `Failed to connect to Gemini Live API: ${err instanceof Error ? err.message : String(err)}`
-        )
-      );
-    });
+    ],
   });
+
+  const text = response.candidates?.[0]?.content?.parts?.[0]?.text;
+  return text?.trim() ?? "";
 }
 
 // ─── TTS via Gemini REST API ───
