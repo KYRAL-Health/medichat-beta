@@ -121,9 +121,9 @@ export async function createGeminiLiveSession(
 
   return {
     sendRealtimeInput(pcm16Base64: string) {
-      const audioBuffer = Buffer.from(pcm16Base64, "base64");
-      const blob = new Blob([audioBuffer], { type: "audio/pcm;rate=16000" });
-      session.sendRealtimeInput({ audio: blob as never });
+      session.sendRealtimeInput({
+        audio: { data: pcm16Base64, mimeType: "audio/pcm;rate=16000" } as never,
+      });
     },
 
     sendText(text: string) {
