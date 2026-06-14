@@ -609,26 +609,33 @@ export async function POST(req: NextRequest) {
           async function drainTTS(): Promise<void> {
             ttsDraining = true;
             while (ttsQueue.length > 0) {
-              const sentence = ttsQueue.shift()!;
-              try {
-                const audioStream = await ttsSpeak(sentence);
-                const reader = audioStream.getReader();
-                const chunks: Uint8Array[] = [];
-                while (true) {
-                  const { done, value } = await reader.read();
-                  if (done) break;
-                  chunks.push(value);
+              // Take all queued sentences and process in parallel
+              const batch = ttsQueue.splice(0);
+              const results = await Promise.allSettled(
+                batch.map(async (sentence) => {
+                  const audioStream = await ttsSpeak(sentence);
+                  const reader = audioStream.getReader();
+                  const chunks: Uint8Array[] = [];
+                  while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                  }
+                  const total = chunks.reduce((s, c) => s + c.length, 0);
+                  if (total > 0) {
+                    const buf = new Uint8Array(total);
+                    let off = 0;
+                    for (const c of chunks) { buf.set(c, off); off += c.length; }
+                    return Buffer.from(buf).toString("base64");
+                  }
+                  return null;
+                })
+              );
+              // Emit audio events in original sentence order
+              for (const result of results) {
+                if (result.status === "fulfilled" && result.value) {
+                  controller.enqueue(sseEvent({ type: "audio", data: result.value }));
                 }
-                const total = chunks.reduce((s, c) => s + c.length, 0);
-                if (total > 0) {
-                  const buf = new Uint8Array(total);
-                  let off = 0;
-                  for (const c of chunks) { buf.set(c, off); off += c.length; }
-                  const b64 = Buffer.from(buf).toString("base64");
-                  controller.enqueue(sseEvent({ type: "audio", data: b64 }));
-                }
-              } catch {
-                // TTS failure for this sentence — skip silently
               }
             }
             ttsDraining = false;

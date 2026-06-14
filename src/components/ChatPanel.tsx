@@ -662,7 +662,12 @@ export function ChatPanel({
                     {voice.status === "speaking" && (
                       <button
                         type="button"
-                        onClick={voice.stopSpeaking}
+                        onClick={() => {
+                          voice.stopSpeaking();
+                          abortRef.current?.abort();
+                          abortRef.current = null;
+                          setLoading(false);
+                        }}
                         title="Stop playback"
                         className="p-2 rounded-lg transition-colors mb-0.5 shrink-0 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400"
                       >
