@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
 
     return new NextResponse(stream as unknown as ReadableStream, {
       headers: {
-        "Content-Type": "audio/mpeg",
+        "Content-Type": "audio/wav",
         "Transfer-Encoding": "chunked",
         "Cache-Control": "no-store",
       },

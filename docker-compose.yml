@@ -64,9 +64,9 @@ services:
       - AI_MODEL_EXTRACT=${AI_MODEL_EXTRACT}
       - AI_MODEL_DASHBOARD=${AI_MODEL_DASHBOARD}
 
-      # Voice (STT / TTS)
-      - STT_API_BASE=${STT_API_BASE:-http://whisper:8000}
-      - TTS_API_BASE=${TTS_API_BASE:-http://kokoro:8880}
+      # Gemini Voice (STT via Live API, TTS via REST API)
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_VOICE=${GEMINI_VOICE:-Kore}
 
       # Storage Configuration (S3)
       - REGION=${REGION}
@@ -85,9 +85,7 @@ services:
       - CLERK_WEBHOOK_SECRET=${CLERK_WEBHOOK_SECRET}
     depends_on:
       - vllm
-      - whisper
-      - kokoro
-      
+
   vllm:
     image: vllm/vllm-openai:latest
     ports:
@@ -102,17 +100,3 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-
-  whisper:
-    image: fedirz/faster-whisper-server:latest-cpu
-    expose:
-      - "8000"
-    environment:
-      - WHISPER__MODEL=${STT_MODEL:-Systran/faster-whisper-base.en}
-    restart: unless-stopped
-
-  kokoro:
-    image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
-    expose:
-      - "8880"
-    restart: unless-stopped
