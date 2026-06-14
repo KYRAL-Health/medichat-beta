@@ -8,7 +8,7 @@ import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { Textarea } from "@/components/ui/Textarea";
-import { useVoice } from "@/hooks/useVoice";
+import { useGeminiVoice } from "@/hooks/useGeminiVoice";
 
 type Mode = "patient" | "physician";
 
@@ -76,17 +76,13 @@ export function ChatPanel({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // sendRef lets useVoice call send() without a stale-closure / circular-dep issue
+  // sendRef lets voice hook call send() without a stale-closure / circular-dep issue
   const sendRef = useRef<(text: string) => void>(() => {});
   const abortRef = useRef<AbortController | null>(null);
-  // Tracks whether the current send() call originated from voice input
-  const voiceInputRef = useRef(false);
 
-  const voice = useVoice({
-    onTranscript: useCallback((text: string) => {
-      voiceInputRef.current = true;
-      sendRef.current(text);
-    }, []),
+  const voice = useGeminiVoice({
+    mode,
+    patientUserId,
     onBargeIn: useCallback(() => {
       abortRef.current?.abort();
       abortRef.current = null;
@@ -169,7 +165,6 @@ export function ChatPanel({
   const send = useCallback(async (msgText?: string) => {
     const text = (msgText ?? input).trim();
     if ((!text && !file) || loading) return;
-    voice.resetPlayback();
     
     // Optimistic UI updates
     const tempFile = file;
@@ -215,13 +210,10 @@ export function ChatPanel({
       }
 
       // 2. Send Chat (SSE stream)
-      const useVoice = voiceInputRef.current;
-      voiceInputRef.current = false;
       const payload: Record<string, unknown> = {
         mode,
         message: text || (tempFile ? "Uploaded a document." : ""),
         documentIds: documentIds.length ? documentIds : undefined,
-        voice: useVoice,
       };
       if (patientUserId) payload.patientUserId = patientUserId;
       if (currentThreadId) payload.threadId = currentThreadId;
@@ -281,8 +273,6 @@ export function ChatPanel({
               }
               return updated;
             });
-          } else if (event.type === "audio" && typeof event.data === "string") {
-            voice.receiveAudioChunk(event.data);
           } else if (event.type === "done") {
             const body = event as {
               threadId?: string;
@@ -321,9 +311,9 @@ export function ChatPanel({
       setLoading(false);
       router.refresh();
     }
-  }, [input, loading, mode, patientUserId, router, currentThreadId, file, fetchThreads, voice.receiveAudioChunk, voice.resetPlayback]);
+  }, [input, loading, mode, patientUserId, router, currentThreadId, file, fetchThreads]);
 
-  // Keep sendRef current so useVoice.onTranscript always calls the latest send
+  // Keep sendRef current so voice hook.onTranscript always calls the latest send
   useEffect(() => { sendRef.current = (text: string) => void send(text); }, [send]);
 
   const acceptMemory = useCallback(async (id: string) => {
@@ -612,21 +602,21 @@ export function ChatPanel({
                     {input.trim() === "" && (
                     <button
                       type="button"
-                      disabled={loading || voice.status === "transcribing"}
+                      disabled={loading || voice.status === "transcribing" || voice.status === "connecting"}
                       onClick={
                         voice.conversationMode
                           ? undefined
-                          : voice.status === "recording"
-                            ? voice.stopRecording
-                            : voice.startRecording
+                          : voice.toggleConversationMode
                       }
-                      title={voice.conversationMode ? "Mic is auto-controlled in conversation mode" : voice.status === "recording" ? "Stop recording" : "Start recording"}
+                      title={voice.conversationMode ? "Mic is auto-controlled in conversation mode" : "Start voice conversation"}
                       className={[
                         "relative p-2 rounded-lg transition-colors mb-0.5 shrink-0",
-                        voice.status === "recording"
+                        voice.status === "recording" || voice.status === "listening"
                           ? "text-red-500 bg-red-50 dark:bg-red-900/30"
-                          : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800",
-                        (loading || voice.status === "transcribing") ? "opacity-40 cursor-not-allowed" : "",
+                          : voice.conversationMode
+                            ? "text-green-600 dark:text-green-400"
+                            : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800",
+                        (loading || voice.status === "transcribing" || voice.status === "connecting") ? "opacity-40 cursor-not-allowed" : "",
                       ].join(" ")}
                     >
                       {(voice.status === "recording" || voice.status === "listening") && (

@@ -5,8 +5,10 @@
   "packageManager": "pnpm@10.32.1",
   "scripts": {
     "dev": "next dev",
+    "dev:ws": "tsx src/server/ws/index.ts",
     "build": "next build",
     "start": "next start",
+    "start:ws": "node dist/server/ws/index.js",
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push"
@@ -34,6 +36,7 @@
     "remark-gfm": "^4.0.1",
     "svix": "^1.85.0",
     "thread-stream": "^4.0.0",
+    "ws": "^8.21.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -44,11 +47,13 @@
     "@types/pg": "^8.16.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@types/ws": "^8.18.1",
     "baseline-browser-mapping": "^2.10.0",
     "drizzle-kit": "^0.31.9",
     "eslint": "^9.39.2",
     "eslint-config-next": "16.0.10",
     "tailwindcss": "^4.2.0",
+    "tsx": "^4.22.4",
     "typescript": "^5.9.3"
   },
   "pnpm": {
