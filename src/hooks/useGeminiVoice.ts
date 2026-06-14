@@ -314,7 +314,21 @@ export function useGeminiVoice(options: UseGeminiVoiceOptions): UseGeminiVoiceRe
     }
   }, [stopCurrentAudio]);
 
+  const connectingRef = useRef(false);
+
   const connectWebSocket = useCallback(async (mode: "patient" | "physician", patientUserId?: string, threadId?: string) => {
+    // Guard: prevent concurrent connections
+    if (connectingRef.current) return;
+    connectingRef.current = true;
+
+    // Close any existing connection first
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    stopMicCapture();
+    stopSpeaking();
+
     setError(null);
     setStatus("connecting");
 
@@ -344,6 +358,7 @@ export function useGeminiVoice(options: UseGeminiVoiceOptions): UseGeminiVoiceRe
       ws.binaryType = "arraybuffer";
 
       ws.onopen = () => {
+        connectingRef.current = false;
         // Send initial config
         ws.send(JSON.stringify({
           type: "config",
@@ -356,11 +371,13 @@ export function useGeminiVoice(options: UseGeminiVoiceOptions): UseGeminiVoiceRe
       ws.onmessage = handleWsMessage;
 
       ws.onerror = () => {
+        connectingRef.current = false;
         setError("WebSocket connection error");
         setStatus("idle");
       };
 
       ws.onclose = () => {
+        connectingRef.current = false;
         wsRef.current = null;
         stopMicCapture();
         if (statusRef.current !== "idle") {
@@ -371,6 +388,7 @@ export function useGeminiVoice(options: UseGeminiVoiceOptions): UseGeminiVoiceRe
       // Start mic capture once connected
       await startMicCapture(ws);
     } catch (err) {
+      connectingRef.current = false;
       setError(err instanceof Error ? err.message : "Connection failed");
       setStatus("idle");
     }
