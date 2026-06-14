@@ -4,8 +4,8 @@
   "private": true,
   "packageManager": "pnpm@10.32.1",
   "scripts": {
-    "dev": "tsx --env-file=.env src/server/ws/index.ts",
-    "dev:next": "next dev",
+    "dev": "next dev",
+    "dev:voice": "tsx --env-file=.env src/server/ws/standalone.ts",
     "build": "next build",
     "start": "next start",
     "start:ws": "node dist/server/ws/index.js",

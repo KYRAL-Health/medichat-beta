@@ -332,8 +332,13 @@ export function useGeminiVoice(options: UseGeminiVoiceOptions): UseGeminiVoiceRe
       const { token } = (await initRes.json()) as { token: string };
 
       // Connect WebSocket
+      // In dev, voice WS runs on a separate port (3001). In production, same origin.
+      const isDev = window.location.port === "3000" || window.location.hostname === "localhost";
+      const wsHost = isDev
+        ? `${window.location.hostname}:3001`
+        : window.location.host;
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const ws = new WebSocket(`${protocol}//${window.location.host}/api/voice/live?token=${token}`);
+      const ws = new WebSocket(`${protocol}//${wsHost}/api/voice/live?token=${token}`);
       wsRef.current = ws;
 
       ws.binaryType = "arraybuffer";
