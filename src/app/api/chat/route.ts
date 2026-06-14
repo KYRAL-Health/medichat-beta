@@ -654,12 +654,28 @@ export async function POST(req: NextRequest) {
             }
           }
 
+          let ttsFirstSent = false;
+
           function flushTTSSentences(final: boolean): void {
             if (!includeVoice) return;
             const parts = ttsSentenceBuffer.split(/(?<=[.!?])\s+|\n+/);
-            const toSpeak = final ? parts : parts.slice(0, -1);
-            ttsSentenceBuffer = final ? "" : (parts[parts.length - 1] ?? "");
-            for (const s of toSpeak) scheduleTTS(s);
+            if (final) {
+              for (const s of parts) scheduleTTS(s);
+              ttsSentenceBuffer = "";
+            } else {
+              const complete = parts.slice(0, -1);
+              ttsSentenceBuffer = parts[parts.length - 1] ?? "";
+              if (complete.length > 0) {
+                // First sentence: send immediately for fastest feedback
+                if (!ttsFirstSent) {
+                  scheduleTTS(complete[0]);
+                  ttsFirstSent = true;
+                  complete.shift();
+                }
+                // Subsequent sentences: send complete ones immediately
+                for (const s of complete) scheduleTTS(s);
+              }
+            }
           }
           // -------------------------------------------------------------------
 
