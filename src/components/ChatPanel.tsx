@@ -79,10 +79,24 @@ export function ChatPanel({
   // sendRef lets voice hook call send() without a stale-closure / circular-dep issue
   const sendRef = useRef<(text: string) => void>(() => {});
   const abortRef = useRef<AbortController | null>(null);
+  const fetchThreadsRef = useRef<() => void>(() => {});
 
   const voice = useGeminiVoice({
     mode,
     patientUserId,
+    threadId: currentThreadId,
+    onTranscript: useCallback((userText?: string, assistantText?: string) => {
+      setMessages((prev) => {
+        const next = [...prev];
+        if (userText) next.push({ role: "user", content: userText });
+        if (assistantText) next.push({ role: "assistant", content: assistantText });
+        return next;
+      });
+    }, []),
+    onThreadCreated: useCallback((newThreadId: string) => {
+      setCurrentThreadId(newThreadId);
+      fetchThreadsRef.current();
+    }, []),
     onBargeIn: useCallback(() => {
       abortRef.current?.abort();
       abortRef.current = null;
@@ -110,6 +124,7 @@ export function ChatPanel({
       })
       .catch(console.error);
   }, [patientUserId, mode]);
+  fetchThreadsRef.current = fetchThreads;
 
   useEffect(() => {
     fetchThreads();
@@ -597,37 +612,6 @@ export function ChatPanel({
                         className="flex-1 min-h-[44px] max-h-48 bg-transparent border-none focus-visible:ring-0 p-2 text-base resize-none"
                         rows={1}
                     />
-
-                    {/* Mic button — inline icon between textarea and send, hidden when typing */}
-                    {input.trim() === "" && (
-                    <button
-                      type="button"
-                      disabled={loading || voice.status === "transcribing" || voice.status === "connecting"}
-                      onClick={
-                        voice.conversationMode
-                          ? undefined
-                          : voice.toggleConversationMode
-                      }
-                      title={voice.conversationMode ? "Mic is auto-controlled in conversation mode" : "Start voice conversation"}
-                      className={[
-                        "relative p-2 rounded-lg transition-colors mb-0.5 shrink-0",
-                        voice.status === "recording" || voice.status === "listening"
-                          ? "text-red-500 bg-red-50 dark:bg-red-900/30"
-                          : voice.conversationMode
-                            ? "text-green-600 dark:text-green-400"
-                            : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800",
-                        (loading || voice.status === "transcribing" || voice.status === "connecting") ? "opacity-40 cursor-not-allowed" : "",
-                      ].join(" ")}
-                    >
-                      {(voice.status === "recording" || voice.status === "listening") && (
-                        <span className="absolute inset-0 rounded-lg animate-ping opacity-30 bg-red-400" />
-                      )}
-                      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8" />
-                      </svg>
-                    </button>
-                    )}
 
                     {/* Conversation mode toggle — inline icon, hidden when typing */}
                     {input.trim() === "" && (

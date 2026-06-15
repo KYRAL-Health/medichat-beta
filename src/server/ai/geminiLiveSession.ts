@@ -1,5 +1,6 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import type { LiveServerMessage } from "@google/genai";
+import { sttTranscribe, pcmToWav } from "@/server/ai/voice";
 
 /**
  * Manages a single Gemini Live API session for one voice conversation.
@@ -8,7 +9,7 @@ import type { LiveServerMessage } from "@google/genai";
 
 export interface LiveSessionCallbacks {
   onAudio?: (pcm16Base64: string) => void;
-  onTurnComplete?: (transcript?: string) => void;
+  onTurnComplete?: (userTranscript?: string, assistantTranscript?: string) => void | Promise<void>;
   onInterrupted?: () => void;
   onToolCall?: (calls: Array<{ id: string; name: string; args: Record<string, unknown> }>) => Promise<void>;
   onError?: (err: Error) => void;
@@ -46,6 +47,8 @@ export async function createGeminiLiveSession(
         },
       },
     },
+    inputAudioTranscription: {},
+    outputAudioTranscription: {},
     systemInstruction: config.systemInstruction,
   };
 
@@ -56,6 +59,12 @@ export async function createGeminiLiveSession(
     connectConfig.temperature = config.temperature;
   }
 
+  // Accumulate transcripts across streaming chunks within a turn
+  let userTranscriptAcc = "";
+  let assistantTranscriptAcc = "";
+  // Accumulate PCM16 audio chunks for assistant speech transcription fallback
+  const audioChunksAcc: Buffer[] = [];
+
   const session = await ai.live.connect({
     model: config.model,
     callbacks: {
@@ -63,9 +72,10 @@ export async function createGeminiLiveSession(
         console.log("[GeminiLive] Session opened");
       },
       onmessage: async (message: LiveServerMessage) => {
-        // Audio data from model
+        // Audio data from model — accumulate for transcription
         if (message.data) {
           callbacks.onAudio?.(message.data);
+          audioChunksAcc.push(Buffer.from(message.data, "base64"));
           return;
         }
 
@@ -73,16 +83,48 @@ export async function createGeminiLiveSession(
         if (message.serverContent) {
           const sc = message.serverContent;
 
+          // Accumulate transcripts BEFORE checking interrupted —
+          // inputTranscription can arrive in the same message as interrupted
+          if (sc.inputTranscription?.text) {
+            userTranscriptAcc += sc.inputTranscription.text;
+          }
+          if (sc.outputTranscription?.text) {
+            assistantTranscriptAcc += sc.outputTranscription.text;
+          }
+          if (sc.modelTurn?.parts) {
+            for (const part of sc.modelTurn.parts) {
+              if (part.text) {
+                assistantTranscriptAcc += part.text;
+              }
+            }
+          }
+
           if (sc.interrupted) {
             callbacks.onInterrupted?.();
             return;
           }
 
-          // Output transcription (text transcript of audio)
-          const transcript = message.text ?? undefined;
-
           if (sc.turnComplete) {
-            callbacks.onTurnComplete?.(transcript);
+            const user = userTranscriptAcc.trim() || undefined;
+            let assistant = assistantTranscriptAcc.trim() || undefined;
+
+            // If no transcript from the API, transcribe the accumulated audio
+            if (!assistant && audioChunksAcc.length > 0) {
+              try {
+                const pcmBuffer = Buffer.concat(audioChunksAcc);
+                const wavBuffer = pcmToWav(pcmBuffer, 24000);
+                assistant = await sttTranscribe(wavBuffer, "audio/wav");
+                if (assistant) console.log("[GeminiLive] Transcribed assistant audio:", assistant.slice(0, 80));
+              } catch (err) {
+                console.error("[GeminiLive] Audio transcription fallback failed:", err);
+              }
+            }
+
+            console.log("[GeminiLive] turnComplete — user:", user, "assistant:", assistant?.slice(0, 80));
+            await callbacks.onTurnComplete?.(user, assistant);
+            userTranscriptAcc = "";
+            assistantTranscriptAcc = "";
+            audioChunksAcc.length = 0;
           }
           return;
         }

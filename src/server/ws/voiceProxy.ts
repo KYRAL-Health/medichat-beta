@@ -112,10 +112,27 @@ async function handleConnection(ws: WebSocket): Promise<void> {
   const proposedMemories: Array<{ id: string; memoryText: string; category: string | null }> = [];
   const proposedSuggestions: Array<{ id: string; kind: string; summaryText: string }> = [];
 
-  // Buffer for assistant text transcript (for thread persistence)
-  // eslint-disable-next-line prefer-const
-  let assistantTranscript = "";
-  let userMessageBuffer = "";
+  /** Ensure a thread exists, creating one if needed. Returns threadId. */
+  async function ensureThread(): Promise<string> {
+    if (threadId) return threadId;
+    const thread = await db
+      .insert(chatThreads)
+      .values({
+        patientUserId,
+        createdByUserId: userId,
+        contextMode: mode,
+        title: mode === "patient" ? "Patient voice chat" : "Physician voice chat",
+        updatedAt: new Date(),
+      })
+      .returning()
+      .then((rows) => rows[0]);
+    threadId = thread.id;
+    // Tell the client about the new thread so it can update its UI
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify({ type: "threadCreated", threadId: thread.id }));
+    }
+    return thread.id;
+  }
 
   ws.on("message", async (data, isBinary) => {
     // Binary = audio PCM16 from client mic
@@ -155,6 +172,27 @@ async function handleConnection(ws: WebSocket): Promise<void> {
             proposedSuggestions.push(...s);
             ws.send(JSON.stringify({ type: "proposedSuggestions", suggestions: s }));
           },
+          onTurnComplete: async (userText, assistantText) => {
+            if (ws.readyState === ws.OPEN) {
+              ws.send(JSON.stringify({ type: "turnComplete", userTranscript: userText, assistantTranscript: assistantText }));
+            }
+
+            // Persist each turn immediately
+            if (userText || assistantText) {
+              try {
+                const tid = await ensureThread();
+                if (userText) {
+                  await db.insert(chatMessages).values({ threadId: tid, senderRole: "user", content: userText });
+                }
+                if (assistantText) {
+                  await db.insert(chatMessages).values({ threadId: tid, senderRole: "assistant", content: assistantText });
+                }
+                await db.update(chatThreads).set({ updatedAt: new Date() }).where(eq(chatThreads.id, tid));
+              } catch (err) {
+                console.error("[VoiceProxy] Failed to persist turn:", err);
+              }
+            }
+          },
         });
         ws.send(JSON.stringify({ type: "ready" }));
       } catch (err) {
@@ -167,7 +205,6 @@ async function handleConnection(ws: WebSocket): Promise<void> {
 
     // ─── Text input (typed while in voice mode) ───
     if (msg.type === "text" && typeof msg.text === "string" && session) {
-      userMessageBuffer = msg.text;
       session.sendText(msg.text);
       return;
     }
@@ -180,33 +217,10 @@ async function handleConnection(ws: WebSocket): Promise<void> {
     }
   });
 
-  ws.on("close", async () => {
+  ws.on("close", () => {
     console.log(`[VoiceProxy] User ${userId} disconnected`);
     session?.close();
     session = null;
-
-    // Persist transcript to thread
-    if (threadId && (userMessageBuffer || assistantTranscript)) {
-      try {
-        if (userMessageBuffer) {
-          await db.insert(chatMessages).values({
-            threadId,
-            senderRole: "user",
-            content: userMessageBuffer,
-          });
-        }
-        if (assistantTranscript) {
-          await db.insert(chatMessages).values({
-            threadId,
-            senderRole: "assistant",
-            content: assistantTranscript,
-          });
-        }
-        await db.update(chatThreads).set({ updatedAt: new Date() }).where(eq(chatThreads.id, threadId));
-      } catch (err) {
-        console.error("[VoiceProxy] Failed to persist transcript:", err);
-      }
-    }
   });
 
   ws.on("error", (err) => {
@@ -226,10 +240,11 @@ interface InitConfig {
   ws: WebSocket;
   onProposedMemories: (m: Array<{ id: string; memoryText: string; category: string | null }>) => void;
   onProposedSuggestions: (s: Array<{ id: string; kind: string; summaryText: string }>) => void;
+  onTurnComplete: (userText?: string, assistantText?: string) => Promise<void>;
 }
 
 async function initializeSession(cfg: InitConfig): Promise<LiveSessionHandle> {
-  const { userId, mode, patientUserId, documentIds, ws, onProposedMemories, onProposedSuggestions } = cfg;
+  const { userId, mode, patientUserId, documentIds, ws, onProposedMemories, onProposedSuggestions, onTurnComplete } = cfg;
 
   // Build system prompt (same logic as /api/chat)
   const patientCtx = await buildPatientContext(patientUserId);
@@ -317,11 +332,7 @@ async function initializeSession(cfg: InitConfig): Promise<LiveSessionHandle> {
           ws.send(buf, { binary: true });
         }
       },
-      onTurnComplete: (transcript) => {
-        if (ws.readyState === ws.OPEN) {
-          ws.send(JSON.stringify({ type: "turnComplete", transcript }));
-        }
-      },
+      onTurnComplete,
       onInterrupted: () => {
         if (ws.readyState === ws.OPEN) {
           ws.send(JSON.stringify({ type: "interrupted" }));

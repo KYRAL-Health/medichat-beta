@@ -22,7 +22,7 @@ function buildGenAI(): GoogleGenAI {
 
 // ─── WAV header writer ───
 
-function pcmToWav(pcmBuffer: Buffer, sampleRate: number): Buffer {
+export function pcmToWav(pcmBuffer: Buffer, sampleRate: number): Buffer {
   const numChannels = 1;
   const bitsPerSample = 16;
   const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;

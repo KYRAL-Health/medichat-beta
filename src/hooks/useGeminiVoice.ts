@@ -19,7 +19,9 @@ export interface ProposedSuggestion {
 interface UseGeminiVoiceOptions {
   mode: "patient" | "physician";
   patientUserId?: string;
-  onTranscript?: (text: string) => void;
+  threadId?: string | null;
+  onTranscript?: (userText?: string, assistantText?: string) => void;
+  onThreadCreated?: (threadId: string) => void;
   onBargeIn?: () => void;
   onProposedMemories?: (memories: ProposedMemory[]) => void;
   onProposedSuggestions?: (suggestions: ProposedSuggestion[]) => void;
@@ -42,7 +44,7 @@ const PLAYBACK_SAMPLE_RATE = 24000;
 const BUFFER_SIZE = 4096;
 
 export function useGeminiVoice(options: UseGeminiVoiceOptions): UseGeminiVoiceResult {
-  const { mode, patientUserId, onTranscript, onBargeIn, onProposedMemories, onProposedSuggestions } = options;
+  const { mode, patientUserId, threadId, onTranscript, onThreadCreated, onBargeIn, onProposedMemories, onProposedSuggestions } = options;
 
   const [conversationMode, setConversationMode] = useState(false);
   const [status, setStatus] = useState<VoiceStatus>("idle");
@@ -69,6 +71,8 @@ export function useGeminiVoice(options: UseGeminiVoiceOptions): UseGeminiVoiceRe
   onProposedMemoriesRef.current = onProposedMemories;
   const onProposedSuggestionsRef = useRef(onProposedSuggestions);
   onProposedSuggestionsRef.current = onProposedSuggestions;
+  const onThreadCreatedRef = useRef(onThreadCreated);
+  onThreadCreatedRef.current = onThreadCreated;
 
   const statusRef = useRef(status);
   statusRef.current = status;
@@ -175,8 +179,9 @@ export function useGeminiVoice(options: UseGeminiVoiceOptions): UseGeminiVoiceRe
         break;
 
       case "turnComplete": {
-        const transcript = typeof msg.transcript === "string" ? msg.transcript : undefined;
-        if (transcript) onTranscriptRef.current?.(transcript);
+        const userText = typeof msg.userTranscript === "string" ? msg.userTranscript : undefined;
+        const assistantText = typeof msg.assistantTranscript === "string" ? msg.assistantTranscript : undefined;
+        if (userText || assistantText) onTranscriptRef.current?.(userText, assistantText);
 
         // If audio is still playing, defer state transition
         if (isPlayingRef.current || audioQueueRef.current.length > 0) {
@@ -216,6 +221,12 @@ export function useGeminiVoice(options: UseGeminiVoiceOptions): UseGeminiVoiceRe
       case "proposedSuggestions":
         if (Array.isArray(msg.suggestions)) {
           onProposedSuggestionsRef.current?.(msg.suggestions as ProposedSuggestion[]);
+        }
+        break;
+
+      case "threadCreated":
+        if (typeof msg.threadId === "string") {
+          onThreadCreatedRef.current?.(msg.threadId);
         }
         break;
 
@@ -328,6 +339,7 @@ export function useGeminiVoice(options: UseGeminiVoiceOptions): UseGeminiVoiceRe
     }
     stopMicCapture();
     stopSpeaking();
+    stoppedRef.current = false; // stopSpeaking sets this true — must reset for new session
 
     setError(null);
     setStatus("connecting");
@@ -408,15 +420,23 @@ export function useGeminiVoice(options: UseGeminiVoiceOptions): UseGeminiVoiceRe
     setConversationMode((prev) => {
       const next = !prev;
       if (next) {
-        // Turning ON — connect
-        void connectWebSocket(mode, patientUserId);
+        // Turning ON — connect, eagerly create AudioContext (user gesture required)
+        if (!playbackContextRef.current) {
+          try {
+            playbackContextRef.current = new (
+              window.AudioContext ??
+              (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+            )({ sampleRate: PLAYBACK_SAMPLE_RATE });
+          } catch { /* will retry in drainQueue */ }
+        }
+        void connectWebSocket(mode, patientUserId, threadId ?? undefined);
       } else {
         // Turning OFF — disconnect
         disconnectWebSocket();
       }
       return next;
     });
-  }, [connectWebSocket, disconnectWebSocket, mode, patientUserId]);
+  }, [connectWebSocket, disconnectWebSocket, mode, patientUserId, threadId]);
 
   const startRecording = useCallback(() => {
     if (statusRef.current !== "idle") return;
