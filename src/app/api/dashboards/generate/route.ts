@@ -39,7 +39,8 @@ function extractJson(text: string): unknown {
   if (t.startsWith("{") && t.endsWith("}")) return JSON.parse(t);
   const first = t.indexOf("{");
   const last = t.lastIndexOf("}");
-  if (first >= 0 && last > first) return JSON.parse(t.slice(first, last + 1));
+  if (first >= 0 && last > first) return JSON.parse(t.slice(first, last + 1));  
+  console.log(text);
   throw new Error("DASHBOARD_JSON_NOT_FOUND");
 }
 
