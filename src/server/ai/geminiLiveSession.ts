@@ -64,6 +64,43 @@ export async function createGeminiLiveSession(
   let assistantTranscriptAcc = "";
   // Accumulate PCM16 audio chunks for assistant speech transcription fallback
   const audioChunksAcc: Buffer[] = [];
+  // Grace period timer for late outputTranscription after turnComplete
+  let turnCompleteTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Finalize the current turn — transcribe fallback audio if needed, fire callback, reset state. */
+  async function finalizeTurn(interrupted: boolean): Promise<void> {
+    if (turnCompleteTimer) {
+      clearTimeout(turnCompleteTimer);
+      turnCompleteTimer = null;
+    }
+
+    const user = userTranscriptAcc.trim() || undefined;
+    let assistant = assistantTranscriptAcc.trim() || undefined;
+
+    // Fallback: transcribe accumulated audio if no transcript from API
+    if (!assistant && audioChunksAcc.length > 0) {
+      try {
+        const pcmBuffer = Buffer.concat(audioChunksAcc);
+        const wavBuffer = pcmToWav(pcmBuffer, 24000);
+        assistant = await sttTranscribe(wavBuffer, "audio/wav");
+        if (assistant) console.log("[GeminiLive] Transcribed assistant audio:", assistant.slice(0, 80));
+      } catch (err) {
+        console.error("[GeminiLive] Audio transcription fallback failed:", err);
+      }
+    }
+
+    const label = interrupted ? "interrupted" : "turnComplete";
+    console.log(`[GeminiLive] ${label} — user:`, user, "assistant:", assistant?.slice(0, 80));
+
+    if (user || assistant) {
+      await callbacks.onTurnComplete?.(user, assistant);
+    }
+
+    // Reset accumulators
+    userTranscriptAcc = "";
+    assistantTranscriptAcc = "";
+    audioChunksAcc.length = 0;
+  }
 
   const session = await ai.live.connect({
     model: config.model,
@@ -72,64 +109,59 @@ export async function createGeminiLiveSession(
         console.log("[GeminiLive] Session opened");
       },
       onmessage: async (message: LiveServerMessage) => {
-        // Audio data from model — accumulate for transcription
-        if (message.data) {
+        // ── Extract audio from modelTurn parts (canonical source) ──
+        // message.data is a convenience getter that pulls from the same parts,
+        // so we process modelTurn.parts directly and don't early-return.
+        if (message.serverContent?.modelTurn?.parts) {
+          for (const part of message.serverContent.modelTurn.parts) {
+            if (part.inlineData?.data) {
+              callbacks.onAudio?.(part.inlineData.data);
+              audioChunksAcc.push(Buffer.from(part.inlineData.data, "base64"));
+            }
+            if (part.text) {
+              assistantTranscriptAcc += part.text;
+            }
+          }
+        }
+        // Fallback: forward audio from message.data if no modelTurn parts found
+        else if (message.data) {
           callbacks.onAudio?.(message.data);
           audioChunksAcc.push(Buffer.from(message.data, "base64"));
-          return;
         }
 
-        // Server content (text, turn complete, interrupted)
+        // ── Process serverContent (transcription + turn signals) ──
         if (message.serverContent) {
           const sc = message.serverContent;
 
-          // Accumulate transcripts BEFORE checking interrupted —
-          // inputTranscription can arrive in the same message as interrupted
+          // Accumulate transcripts (independent of model turn ordering)
           if (sc.inputTranscription?.text) {
             userTranscriptAcc += sc.inputTranscription.text;
           }
           if (sc.outputTranscription?.text) {
             assistantTranscriptAcc += sc.outputTranscription.text;
           }
-          if (sc.modelTurn?.parts) {
-            for (const part of sc.modelTurn.parts) {
-              if (part.text) {
-                assistantTranscriptAcc += part.text;
-              }
-            }
-          }
 
+          // Interrupted — finalize partial turn, then notify client
           if (sc.interrupted) {
+            await finalizeTurn(true);
             callbacks.onInterrupted?.();
             return;
           }
 
+          // turnComplete — start grace period for late transcription chunks
           if (sc.turnComplete) {
-            const user = userTranscriptAcc.trim() || undefined;
-            let assistant = assistantTranscriptAcc.trim() || undefined;
-
-            // If no transcript from the API, transcribe the accumulated audio
-            if (!assistant && audioChunksAcc.length > 0) {
-              try {
-                const pcmBuffer = Buffer.concat(audioChunksAcc);
-                const wavBuffer = pcmToWav(pcmBuffer, 24000);
-                assistant = await sttTranscribe(wavBuffer, "audio/wav");
-                if (assistant) console.log("[GeminiLive] Transcribed assistant audio:", assistant.slice(0, 80));
-              } catch (err) {
-                console.error("[GeminiLive] Audio transcription fallback failed:", err);
-              }
-            }
-
-            console.log("[GeminiLive] turnComplete — user:", user, "assistant:", assistant?.slice(0, 80));
-            await callbacks.onTurnComplete?.(user, assistant);
-            userTranscriptAcc = "";
-            assistantTranscriptAcc = "";
-            audioChunksAcc.length = 0;
+            if (turnCompleteTimer) clearTimeout(turnCompleteTimer);
+            turnCompleteTimer = setTimeout(() => {
+              void finalizeTurn(false).catch((err) => {
+                console.error("[GeminiLive] finalizeTurn failed:", err);
+              });
+            }, 500);
+            return;
           }
           return;
         }
 
-        // Tool calls
+        // ── Tool calls ──
         if (message.toolCall?.functionCalls?.length) {
           const calls = message.toolCall.functionCalls.map((fc) => ({
             id: fc.id ?? "",
@@ -144,7 +176,7 @@ export async function createGeminiLiveSession(
           return;
         }
 
-        // Setup complete
+        // ── Setup complete ──
         if (message.setupComplete) {
           callbacks.onSetupComplete?.();
           return;
@@ -186,6 +218,10 @@ export async function createGeminiLiveSession(
     },
 
     close() {
+      if (turnCompleteTimer) {
+        clearTimeout(turnCompleteTimer);
+        turnCompleteTimer = null;
+      }
       session.close();
     },
   };
