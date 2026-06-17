@@ -262,6 +262,29 @@ async function initializeSession(cfg: InitConfig): Promise<LiveSessionHandle> {
     }
   }
 
+  // Conversation history from existing thread
+  let historyBlock = "";
+  if (cfg.threadId) {
+    try {
+      const recentMessages = await db.query.chatMessages.findMany({
+        where: eq(chatMessages.threadId, cfg.threadId),
+        orderBy: (m, { desc }) => [desc(m.createdAt)],
+        limit: 30,
+      });
+      if (recentMessages.length) {
+        const chronological = [...recentMessages].reverse();
+        const lines = chronological
+          .filter((m) => m.senderRole === "user" || m.senderRole === "assistant")
+          .map((m) => `${m.senderRole === "user" ? "Patient" : "Assistant"}: ${m.content}`);
+        if (lines.length) {
+          historyBlock = `\n\nConversation so far:\n${lines.join("\n")}`;
+        }
+      }
+    } catch (err) {
+      console.error("[VoiceProxy] Failed to load thread history:", err);
+    }
+  }
+
   // PubMed classification (on initial connection — no message yet, so skip)
   // PubMed will be handled if the user sends text via sendText.
 
@@ -286,6 +309,7 @@ async function initializeSession(cfg: InitConfig): Promise<LiveSessionHandle> {
     "",
     patientCtxText,
     docContext,
+    historyBlock,
   ].join("\n");
 
   const physicianSystem = [
@@ -308,6 +332,7 @@ async function initializeSession(cfg: InitConfig): Promise<LiveSessionHandle> {
     "",
     patientCtxText,
     docContext,
+    historyBlock,
   ].join("\n");
 
   const systemInstruction = mode === "physician" ? physicianSystem : patientSystem;

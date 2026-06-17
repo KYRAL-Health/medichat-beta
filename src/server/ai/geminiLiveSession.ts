@@ -1,5 +1,5 @@
 import { GoogleGenAI, Modality } from "@google/genai";
-import type { LiveServerMessage } from "@google/genai";
+import type { LiveServerMessage, Content } from "@google/genai";
 import { sttTranscribe, pcmToWav } from "@/server/ai/voice";
 
 /**
@@ -28,6 +28,7 @@ export interface LiveSessionConfig {
 export interface LiveSessionHandle {
   sendRealtimeInput(pcm16Base64: string): void;
   sendText(text: string): void;
+  sendContext(turns: Content[]): void;
   sendToolResponse(functionResponses: Array<{ id?: string; name?: string; response?: Record<string, unknown> }>): void;
   close(): void;
 }
@@ -66,6 +67,9 @@ export async function createGeminiLiveSession(
   const audioChunksAcc: Buffer[] = [];
   // Grace period timer for late outputTranscription after turnComplete
   let turnCompleteTimer: ReturnType<typeof setTimeout> | null = null;
+  // Resolved when the server sends setupComplete
+  let resolveSetup: () => void;
+  const setupReady = new Promise<void>((resolve) => { resolveSetup = resolve; });
 
   /** Finalize the current turn — transcribe fallback audio if needed, fire callback, reset state. */
   async function finalizeTurn(interrupted: boolean): Promise<void> {
@@ -178,6 +182,7 @@ export async function createGeminiLiveSession(
 
         // ── Setup complete ──
         if (message.setupComplete) {
+          resolveSetup();
           callbacks.onSetupComplete?.();
           return;
         }
@@ -204,6 +209,18 @@ export async function createGeminiLiveSession(
       session.sendClientContent({
         turns: text,
         turnComplete: true,
+      });
+    },
+
+    sendContext(turns: Content[]) {
+      if (!turns.length) return;
+      // Wait for setupComplete before sending context to avoid losing messages
+      void setupReady.then(() => {
+        session.sendClientContent({
+          turns,
+          turnComplete: false,
+        });
+        console.log("[GeminiLive] Prefilled conversation context:", turns.length, "turns");
       });
     },
 

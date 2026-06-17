@@ -632,25 +632,6 @@ export function ChatPanel({
                     </button>
                     )}
 
-                    {/* Stop speaking button — replaces mic/conv when active */}
-                    {voice.status === "speaking" && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          voice.stopSpeaking();
-                          abortRef.current?.abort();
-                          abortRef.current = null;
-                          setLoading(false);
-                        }}
-                        title="Stop playback"
-                        className="p-2 rounded-lg transition-colors mb-0.5 shrink-0 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400"
-                      >
-                        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
-                          <rect x="5" y="5" width="14" height="14" rx="2" />
-                        </svg>
-                      </button>
-                    )}
-
                     <Button onClick={() => void send()} disabled={loading || (!input.trim() && !file)} size="icon" className="mb-0.5 shrink-0 rounded-lg">
                         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" /></svg>
                     </Button>
