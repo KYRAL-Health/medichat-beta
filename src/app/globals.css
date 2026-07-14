@@ -45,6 +45,28 @@
   }
 }
 
+@keyframes medichat-wave {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes medichat-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -138,6 +160,13 @@ body {
     .medichat-animate-in {
       animation: none !important;
       transform: none !important;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .medichat-wave-bar {
+      animation: none !important;
+      transform: scaleY(0.5) !important;
     }
   }
 }

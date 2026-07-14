@@ -8,6 +8,7 @@ import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { Textarea } from "@/components/ui/Textarea";
+import { VoiceStatusIndicator } from "@/components/ui/VoiceStatusIndicator";
 import { useGeminiVoice } from "@/hooks/useGeminiVoice";
 
 type Mode = "patient" | "physician";
@@ -518,7 +519,9 @@ export function ChatPanel({
             </div>
             )}
 
-            {loading && (
+            {voice.conversationMode && voice.status !== "idle" ? (
+            <VoiceStatusIndicator status={voice.status} />
+            ) : loading && (
             <div className="flex justify-start">
                 <div className="bg-zinc-100 dark:bg-zinc-900 rounded-2xl rounded-bl-sm px-5 py-3">
                 <span className="inline-flex items-center gap-1.5">
@@ -599,6 +602,35 @@ export function ChatPanel({
 
                 <div className="flex items-end gap-1 w-full">
                     <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} accept=".pdf,.txt,application/pdf,text/plain" />
+
+                    {voice.conversationMode ? (
+                    /* Voice mode: replace input with status bar */
+                    <div className="flex-1 flex items-center justify-between min-h-[44px] px-3">
+                        <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                            <span className="inline-block h-2 w-2 rounded-full bg-green-500 animate-[medichat-pulse_2s_ease-in-out_infinite]" />
+                            <span className="text-sm font-medium">
+                                {voice.status === "connecting" && "Connecting\u2026"}
+                                {voice.status === "listening" && "Listening\u2026"}
+                                {voice.status === "recording" && "Recording\u2026"}
+                                {voice.status === "transcribing" && "Transcribing\u2026"}
+                                {voice.status === "speaking" && "Speaking\u2026"}
+                                {voice.status === "idle" && "Voice mode active"}
+                            </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={voice.toggleConversationMode}
+                          title="Disable conversation mode"
+                          className="p-2 rounded-lg transition-colors text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30"
+                        >
+                          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                        </button>
+                    </div>
+                    ) : (
+                    /* Normal mode: text input + buttons */
+                    <>
                     <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 mb-0.5 shrink-0" title="Attach document (PDF/TXT)">
                         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                     </button>
@@ -635,6 +667,8 @@ export function ChatPanel({
                     <Button onClick={() => void send()} disabled={loading || (!input.trim() && !file)} size="icon" className="mb-0.5 shrink-0 rounded-lg">
                         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" /></svg>
                     </Button>
+                    </>
+                    )}
                 </div>
             {/* Voice error (shown below input, separately from chat errors) */}
             {voice.error && (
